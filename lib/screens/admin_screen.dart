@@ -11,6 +11,7 @@ import '../config/supabase_config.dart';
 import '../models/user_profile.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_scaffold.dart';
+import 'admin_booking_monitor_screen.dart';
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
@@ -83,6 +84,16 @@ class _AdminScreenState extends State<AdminScreen> {
           tooltip: 'Muat Semula',
           icon: const Icon(Icons.refresh),
           onPressed: _refresh,
+        ),
+        IconButton(
+          tooltip: 'Pantau Semua Tempahan',
+          icon: const Icon(Icons.analytics_outlined),
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AdminBookingMonitorScreen()),
+            );
+          },
         ),
         IconButton(
           tooltip: 'Urus Bilik',

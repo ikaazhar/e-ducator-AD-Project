@@ -92,6 +92,22 @@ class RoomService {
     await _client.from('bookings').insert(booking.toJson());
   }
 
+  /// Ambil semua tempahan secara global (untuk paparan Admin).
+  Future<List<Booking>> fetchAllBookingsGlobal() async {
+    if (SupabaseConfig.isPlaceholder) return const [];
+    try {
+      final data = await _client
+          .from('bookings')
+          .select()
+          .order('booking_date', ascending: false);
+      return (data as List)
+          .map((row) => Booking.fromJson(row as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return const[];
+    }
+  }
+
   /// Ambil tempahan untuk satu bilik pada satu tarikh.
   Future<List<Booking>> fetchBookingsForRoomDate({
     required int roomId,

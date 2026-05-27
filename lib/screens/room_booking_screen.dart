@@ -23,7 +23,14 @@ class _RoomBookingScreenState extends State<RoomBookingScreen> {
   final _service = RoomService();
   final _purposeCtrl = TextEditingController();
 
-  DateTime _date = DateTime.now();
+  // FIX 1: Set the default state date directly to tomorrow (1 day ahead)
+  static DateTime get _tomorrow => DateTime(
+        DateTime.now().year,
+        DateTime.now().month,
+        DateTime.now().day,
+      ).add(const Duration(days: 1));
+
+  DateTime _date = _tomorrow;
   Room? _room;
   TimeOfDay _start = const TimeOfDay(hour: 8, minute: 0);
   TimeOfDay _end = const TimeOfDay(hour: 10, minute: 0);
@@ -71,12 +78,18 @@ class _RoomBookingScreenState extends State<RoomBookingScreen> {
   }
 
   Future<void> _pickDate() async {
+    final today = DateTime.now();
+    // Calculate tomorrow cleanly to strip out current hour/minute variables
+    final tomorrowDate = DateTime(today.year, today.month, today.day).add(const Duration(days: 1));
+
     final picked = await showDatePicker(
       context: context,
-      initialDate: _date,
-      firstDate: DateTime.now().subtract(const Duration(days: 7)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      initialDate: _date.isBefore(tomorrowDate) ? tomorrowDate : _date,
+      // Change from past/today selection to lock it to tomorrow onwards
+      firstDate: tomorrowDate,
+      lastDate: DateTime(today.year + 1),
     );
+
     if (picked != null) {
       setState(() => _date = picked);
       await _loadBookings();
