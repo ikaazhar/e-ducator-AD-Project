@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/user_provider.dart';
-import 'admin_screen.dart';
+import 'dashboards/admin_dashboard.dart';
 import 'dashboards/department_head_dashboard.dart';
 import 'dashboards/lecturer_dashboard.dart';
 import 'dashboards/overview_dashboard.dart';
@@ -26,7 +26,7 @@ class HierarchyRouter extends StatelessWidget {
 
     switch (profile.role) {
       case 'Admin':
-        return const AdminScreen();
+        return const AdminDashboardScreen();
       case 'Timbalan Pengarah Akademik':
         return const OverviewDashboardScreen();
       case 'Ketua Jabatan':
