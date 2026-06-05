@@ -12,6 +12,8 @@ class DisciplineReport {
   final String? reporterName;
   final String? programId;
   final String? departmentId;
+  final String? subjectCode;
+  final String? subjectName;
   final DateTime? createdAt;
 
   const DisciplineReport({
@@ -25,6 +27,8 @@ class DisciplineReport {
     this.reporterName,
     this.programId,
     this.departmentId,
+    this.subjectCode,
+    this.subjectName,
     this.createdAt,
   });
 
@@ -46,6 +50,8 @@ class DisciplineReport {
           : null,
       programId: json['program_id'] as String?,
       departmentId: json['department_id'] as String?,
+      subjectCode: json['subject_code'] as String?,
+      subjectName: json['subject_name'] as String?,
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString())
           : null,
@@ -60,7 +66,34 @@ class DisciplineReport {
         'reported_by': reportedBy,
         'program_id': programId,
         'department_id': departmentId,
+        'subject_code': subjectCode,
       };
+
+  DisciplineReport copyWith({
+    String? studentId,
+    String? studentName,
+    String? issueType,
+    String? severity,
+    String? notes,
+    String? subjectCode,
+    String? subjectName,
+  }) {
+    return DisciplineReport(
+      id: id,
+      studentId: studentId ?? this.studentId,
+      studentName: studentName ?? this.studentName,
+      issueType: issueType ?? this.issueType,
+      severity: severity ?? this.severity,
+      notes: notes ?? this.notes,
+      reportedBy: reportedBy,
+      reporterName: reporterName,
+      programId: programId,
+      departmentId: departmentId,
+      subjectCode: subjectCode ?? this.subjectCode,
+      subjectName: subjectName ?? this.subjectName,
+      createdAt: createdAt,
+    );
+  }
 }
 
 const List<String> kIssueTypes = [
