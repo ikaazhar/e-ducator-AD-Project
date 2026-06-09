@@ -4,6 +4,9 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
 import '../models/attendance_summary.dart';
@@ -26,20 +29,16 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
   List<AttendanceSummary> _summaries = [];
   List<Map<String, dynamic>> _sessionTrend = [];
   List<Map<String, dynamic>> _availableClasses = [];
+  List<String> _sessionOptions = [];
+  List<String> _sectionOptions = [];
   bool _loading = true;
   bool _reloading = false;
   String? _selectedTimetableId;
-  String? _selectedSemester;
-  String? _selectedProgram;
-  String? _selectedSubject;
+  String? _selectedSession;
   String? _selectedSection;
   String? _selectedSubjectLabel;
   DateTime? _dateFrom;
   DateTime? _dateTo;
-  final List<String> _semesterOptions = ['2024/01', '2024/02', '2025/01'];
-  final List<String> _programOptions = ['DGS', 'DPP', 'DED'];
-  final List<String> _subjectOptions = ['DGS1013', 'DGS2023', 'DGS3033'];
-  final List<String> _sectionOptions = ['DGS4A', 'DGS4B', 'DGS4C'];
 
   @override
   void initState() {
@@ -104,9 +103,8 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
           spacing: 12,
           runSpacing: 12,
           children: [
-            _semesterDropdown(),
-            _programDropdown(),
-            _subjectDropdown(),
+            _sessionDropdown(),
+            _classDropdown(),
             _sectionDropdown(),
             _dateFilterButton(
               label: _dateFrom == null
@@ -145,9 +143,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
               },
             ),
             if (_selectedTimetableId != null ||
-                _selectedSemester != null ||
-                _selectedProgram != null ||
-                _selectedSubject != null ||
+                _selectedSession != null ||
                 _selectedSection != null ||
                 _dateFrom != null ||
                 _dateTo != null)
@@ -155,9 +151,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
                 onPressed: () async {
                   setState(() {
                     _selectedTimetableId = null;
-                    _selectedSemester = null;
-                    _selectedProgram = null;
-                    _selectedSubject = null;
+                    _selectedSession = null;
                     _selectedSection = null;
                     _selectedSubjectLabel = null;
                     _dateFrom = null;
@@ -211,45 +205,59 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
     );
   }
 
-  Widget _semesterDropdown() {
+  Widget _sessionDropdown() {
     return _dropdownFilter(
-      label: 'Semester',
-      value: _selectedSemester,
-      options: _semesterOptions,
+      label: 'Sesi',
+      value: _selectedSession,
+      options: _sessionOptions,
       onChanged: (value) async {
-        setState(() => _selectedSemester = value);
+        setState(() => _selectedSession = value);
         await _reloadData();
       },
     );
   }
 
-  Widget _programDropdown() {
-    return _dropdownFilter(
-      label: 'Program',
-      value: _selectedProgram,
-      options: _programOptions,
-      onChanged: (value) async {
-        setState(() => _selectedProgram = value);
-        await _reloadData();
-      },
-    );
-  }
-
-  Widget _subjectDropdown() {
-    return _dropdownFilter(
-      label: 'Subjek',
-      value: _selectedSubject,
-      options: _subjectOptions,
-      onChanged: (value) async {
-        setState(() => _selectedSubject = value);
-        await _reloadData();
-      },
+  Widget _classDropdown() {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 320, minWidth: 180),
+      child: DropdownButtonFormField<String?>(
+        decoration: const InputDecoration(labelText: 'Subjek'),
+        isExpanded: true,
+        value: _selectedTimetableId,
+        items: [
+          const DropdownMenuItem<String?>(
+            value: null,
+            child: Text('Semua Subjek'),
+          ),
+          ..._availableClasses.map((item) {
+            final id = item['timetableId']?.toString();
+            return DropdownMenuItem<String?>(
+              value: id,
+              child: Text(
+                item['label']?.toString() ?? id ?? '',
+                overflow: TextOverflow.ellipsis,
+              ),
+            );
+          }),
+        ],
+        onChanged: (value) async {
+          final selected = _availableClasses.cast<Map<String, dynamic>?>().firstWhere(
+                (item) => item?['timetableId']?.toString() == value,
+                orElse: () => null,
+              );
+          setState(() {
+            _selectedTimetableId = value;
+            _selectedSubjectLabel = selected?['label']?.toString();
+          });
+          await _reloadData();
+        },
+      ),
     );
   }
 
   Widget _sectionDropdown() {
     return _dropdownFilter(
-      label: 'Seksion',
+      label: 'Seksyen',
       value: _selectedSection,
       options: _sectionOptions,
       onChanged: (value) async {
@@ -676,7 +684,9 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
   }
 
   Widget _criticalStudentsTable() {
-    final criticalList = _filtered.where((s) => s.attendancePercent < 80).toList()
+    final criticalList = _filtered
+        .where((s) => s.totalAbsences > 0 && s.attendancePercent < 80)
+        .toList()
       ..sort((a, b) => a.attendancePercent.compareTo(b.attendancePercent));
 
     return Card(
@@ -696,7 +706,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
                   ),
                 ),
                 const Spacer(),
-                if (_below80Count > 0)
+                if (criticalList.isNotEmpty)
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
@@ -704,7 +714,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      '$_below80Count pelajar',
+                      '${criticalList.length} pelajar',
                       style: const TextStyle(color: Colors.white, fontSize: 12),
                     ),
                   ),
@@ -956,12 +966,12 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
     }
 
     final classes = await _service.fetchAvailableClasses(user);
+    final sessions = await _service.fetchAvailableSessions();
+    final sections = await _service.fetchAvailableSections();
     final summaries = await _service.fetchAttendanceSummary(
       user,
       timetableId: _selectedTimetableId,
-      semester: _selectedSemester,
-      programId: _selectedProgram,
-      subjectCode: _selectedSubject,
+      session: _selectedSession,
       section: _selectedSection,
       dateFrom: _dateFrom?.toIso8601String().substring(0, 10),
       dateTo: _dateTo?.toIso8601String().substring(0, 10),
@@ -969,9 +979,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
     final sessionTrend = await _service.fetchRawSessionTrend(
       user,
       timetableId: _selectedTimetableId,
-      semester: _selectedSemester,
-      programId: _selectedProgram,
-      subjectCode: _selectedSubject,
+      session: _selectedSession,
       section: _selectedSection,
       dateFrom: _dateFrom?.toIso8601String().substring(0, 10),
       dateTo: _dateTo?.toIso8601String().substring(0, 10),
@@ -980,6 +988,8 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
     if (!mounted) return;
     setState(() {
       _availableClasses = classes;
+      _sessionOptions = sessions;
+      _sectionOptions = sections;
       _summaries = summaries;
       _sessionTrend = sessionTrend;
       _loading = false;
@@ -1002,9 +1012,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
     final summaries = await _service.fetchAttendanceSummary(
       user,
       timetableId: _selectedTimetableId,
-      semester: _selectedSemester,
-      programId: _selectedProgram,
-      subjectCode: _selectedSubject,
+      session: _selectedSession,
       section: _selectedSection,
       dateFrom: _dateFrom?.toIso8601String().substring(0, 10),
       dateTo: _dateTo?.toIso8601String().substring(0, 10),
@@ -1012,9 +1020,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
     final sessionTrend = await _service.fetchRawSessionTrend(
       user,
       timetableId: _selectedTimetableId,
-      semester: _selectedSemester,
-      programId: _selectedProgram,
-      subjectCode: _selectedSubject,
+      session: _selectedSession,
       section: _selectedSection,
       dateFrom: _dateFrom?.toIso8601String().substring(0, 10),
       dateTo: _dateTo?.toIso8601String().substring(0, 10),
@@ -1028,13 +1034,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
     });
   }
 
-  List<AttendanceSummary> get _filtered {
-    final role = context.watch<UserProvider>().profile?.role ?? '';
-    if (role == 'Timbalan Pengarah Akademik') {
-      return _summaries.where((s) => s.warningLevel == 3).toList();
-    }
-    return _summaries;
-  }
+  List<AttendanceSummary> get _filtered => _summaries;
 
   int get _totalStudents => _filtered.length;
 
@@ -1112,13 +1112,148 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
     return insights;
   }
 
-  void _exportPdf(BuildContext context) {
-    final ts = DateFormat('d MMM yyyy HH:mm', 'ms').format(DateTime.now());
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Laporan PDF sedang dijana ($ts). Sila tunggu...'),
-        backgroundColor: AppTheme.navy,
+  Future<void> _exportPdf(BuildContext context) async {
+    try {
+      final now = DateTime.now();
+      final dateLabel = DateFormat('d MMM yyyy HH:mm', 'ms').format(now);
+      final filename =
+          'laporan-kehadiran-${DateFormat('yyyyMMdd-HHmm').format(now)}.pdf';
+      final criticalCount = _filtered
+          .where((s) => s.totalAbsences > 0 && s.attendancePercent < 80)
+          .length;
+      final totals = _statusTotals;
+      final pdf = pw.Document();
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(28),
+          build: (context) => [
+            pw.Text(
+              'Laporan Kehadiran',
+              style: pw.TextStyle(
+                fontSize: 22,
+                fontWeight: pw.FontWeight.bold,
+              ),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Text('Dijana pada $dateLabel'),
+            pw.SizedBox(height: 14),
+            _pdfSectionTitle('Ringkasan'),
+            pw.TableHelper.fromTextArray(
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              headerDecoration:
+                  const pw.BoxDecoration(color: PdfColors.grey300),
+              cellAlignment: pw.Alignment.centerLeft,
+              data: [
+                ['Metrik', 'Nilai'],
+                ['Jumlah Pelajar', '$_totalStudents'],
+                [
+                  'Kehadiran Keseluruhan',
+                  '${_overallPercent.toStringAsFixed(1)}%',
+                ],
+                ['Jumlah Tak Hadir', '$_totalAbsences'],
+                ['Pelajar Kritikal', '$criticalCount'],
+                ['Kes Amaran Aktif', '$_activeWarnings'],
+              ],
+            ),
+            pw.SizedBox(height: 14),
+            _pdfSectionTitle('Filter'),
+            pw.Text(_pdfFilterSummary()),
+            pw.SizedBox(height: 14),
+            _pdfSectionTitle('Taburan Status'),
+            pw.TableHelper.fromTextArray(
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              headerDecoration:
+                  const pw.BoxDecoration(color: PdfColors.grey300),
+              data: [
+                ['Status', 'Jumlah'],
+                ['Hadir', '${totals['hadir']}'],
+                ['Tak Hadir', '${totals['takHadir']}'],
+                ['MC', '${totals['mc']}'],
+                ['CK', '${totals['ck']}'],
+              ],
+            ),
+            pw.SizedBox(height: 14),
+            _pdfSectionTitle('Wawasan'),
+            ..._insights.map((insight) => pw.Bullet(text: insight)),
+            pw.SizedBox(height: 14),
+            _pdfSectionTitle('Senarai Pelajar'),
+            pw.TableHelper.fromTextArray(
+              headerStyle: pw.TextStyle(
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.white,
+              ),
+              headerDecoration:
+                  const pw.BoxDecoration(color: PdfColors.blueGrey800),
+              cellStyle: const pw.TextStyle(fontSize: 9),
+              cellAlignment: pw.Alignment.centerLeft,
+              columnWidths: {
+                0: const pw.FlexColumnWidth(2.4),
+                1: const pw.FlexColumnWidth(1.3),
+                2: const pw.FlexColumnWidth(1.1),
+                3: const pw.FlexColumnWidth(1.0),
+                4: const pw.FlexColumnWidth(1.0),
+                5: const pw.FlexColumnWidth(1.2),
+              },
+              data: [
+                [
+                  'Nama',
+                  'ID Pelajar',
+                  'Kelas',
+                  'Kehadiran',
+                  'Tak Hadir',
+                  'Risiko',
+                ],
+                ..._filtered.map(
+                  (summary) => [
+                    summary.studentName,
+                    summary.studentId,
+                    summary.classId,
+                    '${summary.attendancePercent.toStringAsFixed(1)}%',
+                    '${summary.totalAbsences}',
+                    summary.riskStatus,
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+
+      await Printing.layoutPdf(
+        name: filename,
+        onLayout: (_) async => pdf.save(),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal menjana PDF: $error'),
+          backgroundColor: AppTheme.tidakHadir,
+        ),
+      );
+    }
+  }
+
+  pw.Widget _pdfSectionTitle(String text) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 6),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
       ),
     );
+  }
+
+  String _pdfFilterSummary() {
+    final parts = <String>[
+      'Sesi: ${_selectedSession ?? "Semua"}',
+      'Subjek: ${_selectedSubjectLabel ?? "Semua"}',
+      'Seksyen: ${_selectedSection ?? "Semua"}',
+      'Tarikh Dari: ${_dateFrom == null ? "Semua" : DateFormat('d MMM yyyy', 'ms').format(_dateFrom!)}',
+      'Tarikh Hingga: ${_dateTo == null ? "Semua" : DateFormat('d MMM yyyy', 'ms').format(_dateTo!)}',
+    ];
+    return parts.join(' | ');
   }
 }
