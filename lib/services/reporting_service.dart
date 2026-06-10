@@ -12,25 +12,63 @@ class ReportingService {
 
   Future<List<Map<String, dynamic>>> fetchAvailableClasses(UserProfile user) async {
     try {
-      var query = _client.from('timetable').select('id, subject_code, subject_name');
-      if (user.role == 'Lecturer') {
-        query = query.eq('lecturer_id', user.id);
-      } 
-      final departmentUnit = user.departmentUnit;
-      if ((user.role == 'Ketua Program' || user.role == 'Ketua Jabatan') &&
-          departmentUnit != null) {
-        query = query.eq('department_unit', departmentUnit);
-      }
+      final query = _client.from('timetable').select('id, subject_code, subject_name');
       final data = await query.order('subject_code', ascending: true);
       if (data == null) return [];
+
+      final grouped = <String, List<String>>{};
+      for (final row in (data as List).cast<Map<String, dynamic>>()) {
+        final label = '${row['subject_code'] ?? ''} - ${row['subject_name'] ?? ''}';
+        final id = row['id']?.toString();
+        if (id == null || id.isEmpty) continue;
+        grouped.putIfAbsent(label, () => []).add(id);
+      }
+
+      return grouped.entries
+          .map((entry) => {
+                'timetableId': entry.value.join(','),
+                'label': entry.key,
+              })
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<List<String>> fetchAvailableSessions() async {
+    try {
+      final data = await _client
+          .from('timetable')
+          .select('session')
+          .not('session', 'is', null)
+          .order('session', ascending: false);
+      if (data == null) return [];
+
       return (data as List)
-          .cast<Map<String, dynamic>>()
-          .map((row) {
-            return {
-              'timetableId': row['id'].toString(),
-              'label': '${row['subject_code'] ?? ''} — ${row['subject_name'] ?? ''}',
-            };
-          })
+          .map((row) => (row as Map<String, dynamic>)['session']?.toString())
+          .whereType<String>()
+          .where((session) => session.trim().isNotEmpty)
+          .toSet()
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<List<String>> fetchAvailableSections() async {
+    try {
+      final data = await _client
+          .from('students')
+          .select('kelas')
+          .not('kelas', 'is', null)
+          .order('kelas', ascending: true);
+      if (data == null) return [];
+
+      return (data as List)
+          .map((row) => (row as Map<String, dynamic>)['kelas']?.toString())
+          .whereType<String>()
+          .where((section) => section.trim().isNotEmpty)
+          .toSet()
           .toList();
     } catch (_) {
       return [];
@@ -40,63 +78,67 @@ class ReportingService {
   Future<List<AttendanceSummary>> fetchAttendanceSummary(
     UserProfile user, {
     String? timetableId,
-    String? semester,
-    String? programId,
-    String? subjectCode,
+    String? session,
     String? section,
     String? dateFrom,
     String? dateTo,
   }) async {
     try {
-      var query = _client.from('attendance_records').select(
-            'attendance_date, attendance_status, student_id, timetable_id, '
-            'students(id, full_name, student_id, program_id, kelas), '
-            'timetable(id, department_unit, lecturer_id, subject_code, semester)',
-          );
-      if (timetableId != null) {
-        query = query.eq('timetable_id', timetableId);
-      }
-      if (semester != null) {
-        query = query.eq('semester', semester);
-      }
-      if (programId != null) {
-        query = query.eq('students.program_id', programId);
-      }
-      if (subjectCode != null) {
-        query = query.eq('timetable.subject_code', subjectCode);
+      var studentQuery =
+          _client.from('students').select('id, full_name, student_id, program_id, kelas');
+      if (timetableId != null || session != null) {
+        final timetableUnits = await _fetchTimetableUnits(
+          timetableId: timetableId,
+          session: session,
+        );
+        if (timetableUnits.isEmpty) return [];
+        studentQuery = timetableUnits.length == 1
+            ? studentQuery.eq('program_id', timetableUnits.first)
+            : studentQuery.inFilter('program_id', timetableUnits);
       }
       if (section != null) {
-        query = query.eq('students.kelas', section);
+        studentQuery = studentQuery.eq('kelas', section);
+      }
+      final studentData = await studentQuery.order('full_name', ascending: true);
+      if (studentData == null) return [];
+      final students = (studentData as List).cast<Map<String, dynamic>>();
+
+      var attendanceQuery = _client.from('attendance_records').select(
+            'attendance_date, attendance_status, student_id, timetable_id, '
+            'timetable!inner(id, department_unit, lecturer_id, subject_code, session)',
+          );
+      if (timetableId != null) {
+        final ids = _splitTimetableIds(timetableId);
+        attendanceQuery = ids.length == 1
+            ? attendanceQuery.eq('timetable_id', ids.first)
+            : attendanceQuery.inFilter('timetable_id', ids);
+      }
+      if (session != null) {
+        attendanceQuery = attendanceQuery.eq('timetable.session', session);
       }
       if (dateFrom != null) {
-        query = query.gte('attendance_date', dateFrom);
+        attendanceQuery = attendanceQuery.gte('attendance_date', dateFrom);
       }
       if (dateTo != null) {
-        query = query.lte('attendance_date', dateTo);
+        attendanceQuery = attendanceQuery.lte('attendance_date', dateTo);
       }
 
-      final data = await query;
-      if (data == null) return [];
+      final attendanceData = await attendanceQuery;
+      final rows = attendanceData == null
+          ? <Map<String, dynamic>>[]
+          : (attendanceData as List).cast<Map<String, dynamic>>();
 
-      final rows = (data as List).cast<Map<String, dynamic>>();
-      final filteredRows = rows.where((row) {
-        final timetable = row['timetable'] as Map<String, dynamic>?;
-        return timetable != null && _isInScope(user, timetable);
-      }).toList();
-
-      final groups = <String, List<Map<String, dynamic>>>{};
-      for (final row in filteredRows) {
+      final recordsByStudent = <String, List<Map<String, dynamic>>>{};
+      for (final row in rows) {
         final studentId = row['student_id']?.toString() ?? '';
-        final timetableIdValue = row['timetable_id']?.toString() ?? '';
-        final key = '$studentId|$timetableIdValue';
-        groups.putIfAbsent(key, () => []).add(row);
+        if (studentId.isEmpty) continue;
+        recordsByStudent.putIfAbsent(studentId, () => []).add(row);
       }
 
       final summaries = <AttendanceSummary>[];
-      for (final group in groups.values) {
-        final student = (group.first['students'] as Map<String, dynamic>?) ?? {};
-        final timetable = (group.first['timetable'] as Map<String, dynamic>?) ?? {};
-
+      for (final student in students) {
+        final id = student['id']?.toString() ?? '';
+        final group = recordsByStudent[id] ?? const <Map<String, dynamic>>[];
         int hadir = 0;
         int takHadir = 0;
         for (final row in group) {
@@ -110,12 +152,12 @@ class ReportingService {
 
         final totalCounted = hadir + takHadir;
         final attendancePercent =
-            totalCounted == 0 ? 100.0 : (hadir / totalCounted) * 100;
+            totalCounted == 0 ? 0.0 : (hadir / totalCounted) * 100;
 
-        final studentIdValue = student['id']?.toString() ?? student['student_id']?.toString() ?? '';
+        final studentIdValue =
+            student['student_id']?.toString() ?? student['id']?.toString() ?? '';
         final classId = student['kelas']?.toString() ??
             student['program_id']?.toString() ??
-            timetable['subject_code']?.toString() ??
             '';
 
         summaries.add(
@@ -180,9 +222,7 @@ class ReportingService {
   Future<List<Map<String, dynamic>>> fetchRawSessionTrend(
     UserProfile user, {
     String? timetableId,
-    String? semester,
-    String? programId,
-    String? subjectCode,
+    String? session,
     String? section,
     String? dateFrom,
     String? dateTo,
@@ -190,20 +230,17 @@ class ReportingService {
     try {
       var query = _client.from('attendance_records').select(
             'attendance_date, attendance_status, timetable_id, '
-            'students(program_id, kelas), '
-            'timetable(lecturer_id, department_unit, subject_code, semester)',
+            'students!inner(program_id, kelas), '
+            'timetable!inner(lecturer_id, department_unit, subject_code, session)',
           );
       if (timetableId != null) {
-        query = query.eq('timetable_id', timetableId);
+        final ids = _splitTimetableIds(timetableId);
+        query = ids.length == 1
+            ? query.eq('timetable_id', ids.first)
+            : query.inFilter('timetable_id', ids);
       }
-      if (semester != null) {
-        query = query.eq('semester', semester);
-      }
-      if (programId != null) {
-        query = query.eq('students.program_id', programId);
-      }
-      if (subjectCode != null) {
-        query = query.eq('timetable.subject_code', subjectCode);
+      if (session != null) {
+        query = query.eq('timetable.session', session);
       }
       if (section != null) {
         query = query.eq('students.kelas', section);
@@ -218,11 +255,7 @@ class ReportingService {
       final data = await query;
       if (data == null) return [];
 
-      final rows = (data as List).cast<Map<String, dynamic>>();
-      final filteredRows = rows.where((row) {
-        final timetable = row['timetable'] as Map<String, dynamic>?;
-        return timetable != null && _isInScope(user, timetable);
-      }).toList();
+      final filteredRows = (data as List).cast<Map<String, dynamic>>();
 
       final trend = <String, Map<String, int>>{};
       for (final row in filteredRows) {
@@ -270,25 +303,46 @@ class ReportingService {
     }
   }
 
-  bool _isInScope(UserProfile user, Map<String, dynamic> timetable) {
-    switch (user.role) {
-      case 'Lecturer':
-        return timetable['lecturer_id'] == user.id;
-      case 'Ketua Program':
-      case 'Ketua Jabatan':
-        return timetable['department_unit'] == user.departmentUnit;
-      case 'Timbalan Pengarah Akademik':
-      case 'Admin':
-      default:
-        return true;
-    }
-  }
-
   int _warningLevel(double percent) {
     if (percent <= 80) return 3;
     if (percent <= 90) return 2;
     if (percent <= 95) return 1;
     return 0;
+  }
+
+  List<String> _splitTimetableIds(String value) {
+    return value
+        .split(',')
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toList();
+  }
+
+  Future<List<String>> _fetchTimetableUnits({
+    String? timetableId,
+    String? session,
+  }) async {
+    var query = _client.from('timetable').select('department_unit');
+
+    if (timetableId != null) {
+      final ids = _splitTimetableIds(timetableId);
+      query = ids.length == 1
+          ? query.eq('id', ids.first)
+          : query.inFilter('id', ids);
+    }
+    if (session != null) {
+      query = query.eq('session', session);
+    }
+
+    final data = await query;
+    if (data == null) return [];
+
+    return (data as List)
+        .map((row) => (row as Map<String, dynamic>)['department_unit']?.toString())
+        .whereType<String>()
+        .where((unit) => unit.trim().isNotEmpty)
+        .toSet()
+        .toList();
   }
 
   String _riskStatus(double percent) {
