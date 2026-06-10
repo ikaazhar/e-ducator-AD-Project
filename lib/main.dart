@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config/supabase_config.dart';
 import 'providers/user_provider.dart';
+import 'screens/admin_booking_monitor_screen.dart';
 import 'screens/admin_room_screen.dart';
 import 'screens/admin_screen.dart';
 import 'screens/attendance_screen.dart';
@@ -54,6 +55,7 @@ class EducatorApp extends StatelessWidget {
           '/login': (_) => const LoginScreen(),
           '/register': (_) => const RegisterScreen(),
           '/admin': (_) => const AdminScreen(),
+          '/admin-booking-monitor': (_) => const AdminBookingMonitorScreen(),
           '/admin-rooms': (_) => const AdminRoomScreen(),
           '/timetable': (_) => const TimetableScreen(),
           '/timetable-upload': (_) => const TimetableUploadScreen(),
