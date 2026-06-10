@@ -1,7 +1,4 @@
 // lib/models/timetable_entry.dart
-//
-// Model entri jadual waktu. Memetakan jadual `public.timetable`.
-
 class TimetableEntry {
   final String id;
   final String subjectCode;
@@ -10,11 +7,12 @@ class TimetableEntry {
   final String? lecturerId;
   final String? lecturerName;
   final String day;
-  final String startTime; // 'HH:MM:SS'
+  final String startTime;
   final String endTime;
   final int? roomId;
   final String? roomName;
   final String? session;
+  final String? kelas; // e.g. DGS4A, DPP4A — from students.kelas
 
   const TimetableEntry({
     required this.id,
@@ -29,16 +27,15 @@ class TimetableEntry {
     this.roomId,
     this.roomName,
     this.session,
+    this.kelas,
   });
 
   factory TimetableEntry.fromJson(Map<String, dynamic> json) {
-    // Handle joined lecturer profile (profiles!lecturer_id)
     final profileJoin = json['profiles'];
     final String? lecturerName = profileJoin is Map<String, dynamic>
         ? profileJoin['full_name'] as String?
         : json['lecturer_name'] as String?;
 
-    // Handle joined room
     final roomJoin = json['rooms'];
     final String? roomName = roomJoin is Map<String, dynamic>
         ? roomJoin['room_name'] as String?
@@ -57,6 +54,7 @@ class TimetableEntry {
       roomId: json['room_id'] as int?,
       roomName: roomName,
       session: json['session'] as String?,
+      kelas: json['kelas'] as String?,
     );
   }
 
@@ -70,15 +68,14 @@ class TimetableEntry {
         'end_time': endTime,
         'room_id': roomId,
         'session': session,
+        'kelas': kelas,
       };
 
-  /// Returns a display-friendly time slot string e.g. "08:00 - 10:00"
   String get timeSlot {
     String hhmm(String s) => s.length >= 5 ? s.substring(0, 5) : s;
     return '${hhmm(startTime)} - ${hhmm(endTime)}';
   }
 
-  /// Tentukan jika slot ini sedang berlangsung berbanding waktu semasa.
   bool isCurrentlyOngoing(DateTime now) {
     if (!_dayMatches(now)) return false;
     final start = _parseDuration(startTime);
@@ -87,7 +84,6 @@ class TimetableEntry {
     return cur >= start && cur < end;
   }
 
-  /// Tentukan jika slot ini akan datang pada hari ini.
   bool isUpcomingToday(DateTime now) {
     if (!_dayMatches(now)) return false;
     final cur = Duration(hours: now.hour, minutes: now.minute);

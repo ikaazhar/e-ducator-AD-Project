@@ -1,7 +1,4 @@
 // lib/services/timetable_service.dart
-//
-// Perkhidmatan untuk modul jadual waktu (M4 + M5).
-// Pensyarah diambil terus dari jadual `profiles` menggunakan foreign key join.
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/supabase_config.dart';
@@ -11,11 +8,8 @@ import '../models/user_profile.dart';
 class TimetableService {
   SupabaseClient get _client => Supabase.instance.client;
 
-  // ─────────────────────────────────────────────
-  // FETCH
-  // ─────────────────────────────────────────────
+  // ─── FETCH ───────────────────────────────────────────────
 
-  /// Ambil jadual untuk seorang pensyarah — nama pensyarah & bilik disertakan.
   Future<List<TimetableEntry>> fetchLecturerTimetable(String lecturerId) async {
     if (SupabaseConfig.isPlaceholder) return _mockEntries();
     try {
@@ -33,8 +27,6 @@ class TimetableService {
     }
   }
 
-  /// Ambil semua entri jadual — untuk Admin / Ketua Program.
-  /// Tapis ikut unit jabatan jika diperlukan.
   Future<List<TimetableEntry>> fetchAllTimetable({
     String? departmentUnit,
   }) async {
@@ -55,8 +47,7 @@ class TimetableService {
     }
   }
 
-  /// Ambil senarai pensyarah untuk unit jabatan tertentu dari `profiles`.
-  /// Digunakan untuk dropdown dalam borang tambah entri.
+  /// Ambil senarai pensyarah dari profiles mengikut unit jabatan.
   Future<List<UserProfile>> fetchLecturersByUnit(String departmentUnit) async {
     if (SupabaseConfig.isPlaceholder) {
       return [
@@ -84,13 +75,32 @@ class TimetableService {
     }
   }
 
-  // ─────────────────────────────────────────────
-  // CONFLICT CHECK
-  // ─────────────────────────────────────────────
+  /// Ambil senarai kelas (kelas) yang unik dari jadual students
+  /// mengikut program_id — digunakan untuk dropdown kelas dalam borang M4.
+  Future<List<String>> fetchKelasByUnit(String departmentUnit) async {
+    if (SupabaseConfig.isPlaceholder) {
+      return ['${departmentUnit}4A', '${departmentUnit}4B'];
+    }
+    try {
+      final data = await _client
+          .from('students')
+          .select('kelas')
+          .eq('program_id', departmentUnit)
+          .order('kelas');
+      final all = (data as List)
+          .map((r) => r['kelas'] as String?)
+          .whereType<String>()
+          .toSet()
+          .toList();
+      all.sort();
+      return all;
+    } catch (_) {
+      return const [];
+    }
+  }
 
-  /// Semak sama ada slot bilik bebas daripada konflik jadual tetap.
-  /// Mengembalikan `true` jika tiada konflik (selamat untuk masukkan).
-  /// Hantar [excludeId] semasa mengedit supaya entri semasa diabaikan.
+  // ─── CONFLICT CHECK ──────────────────────────────────────
+
   Future<bool> isRoomSlotFree({
     required int roomId,
     required String day,
@@ -117,11 +127,8 @@ class TimetableService {
     }
   }
 
-  // ─────────────────────────────────────────────
-  // INSERT / UPDATE / DELETE
-  // ─────────────────────────────────────────────
+  // ─── INSERT / UPDATE / DELETE ────────────────────────────
 
-  /// Masukkan entri jadual baru.
   Future<void> insertTimetable(
     TimetableEntry entry, {
     required String createdBy,
@@ -131,26 +138,18 @@ class TimetableService {
     await _client.from('timetable').insert(payload);
   }
 
-  /// Kemaskini entri sedia ada.
-  Future<void> updateTimetable(
-    String id,
-    TimetableEntry entry,
-  ) async {
+  Future<void> updateTimetable(String id, TimetableEntry entry) async {
     if (SupabaseConfig.isPlaceholder) return;
     await _client.from('timetable').update(entry.toJson()).eq('id', id);
   }
 
-  /// Padam entri jadual.
   Future<void> deleteTimetable(String id) async {
     if (SupabaseConfig.isPlaceholder) return;
     await _client.from('timetable').delete().eq('id', id);
   }
 
-  // ─────────────────────────────────────────────
-  // ATTENDANCE INTEGRATION (M1)
-  // ─────────────────────────────────────────────
+  // ─── ATTENDANCE INTEGRATION ──────────────────────────────
 
-  /// Semak sama ada kehadiran telah dihantar untuk sesi ini pada tarikh tertentu.
   Future<bool> checkSessionSubmitted({
     required String timetableId,
     required String attendanceDate,
@@ -168,11 +167,8 @@ class TimetableService {
     }
   }
 
-  // ─────────────────────────────────────────────
-  // STATS (untuk summary bar di skrin M4)
-  // ─────────────────────────────────────────────
+  // ─── STATS ───────────────────────────────────────────────
 
-  /// Kira statistik ringkasan jadual untuk unit tertentu (atau semua).
   Future<TimetableStats> fetchStats({String? departmentUnit}) async {
     if (SupabaseConfig.isPlaceholder) {
       return const TimetableStats(
@@ -183,20 +179,16 @@ class TimetableService {
       );
     }
     try {
-      var query = _client.from('timetable').select(
-            'id, room_id, lecturer_id, day',
-          );
+      var query = _client.from('timetable').select('id, room_id, lecturer_id, day');
       if (departmentUnit != null) {
         query = query.eq('department_unit', departmentUnit);
       }
       final data = await query;
       final list = data as List;
-
       final today = _todayMalay();
       final todayList = list.where((e) => e['day'] == today).toList();
       final rooms = list.map((e) => e['room_id']).toSet();
       final lecturers = list.map((e) => e['lecturer_id']).toSet();
-
       return TimetableStats(
         totalClasses: list.length,
         roomsInUse: rooms.length,
@@ -224,60 +216,60 @@ class TimetableService {
     return map[DateTime.now().weekday] ?? '';
   }
 
-  // ─────────────────────────────────────────────
-  // MOCK DATA
-  // ─────────────────────────────────────────────
+  // ─── MOCK DATA ───────────────────────────────────────────
+
   List<TimetableEntry> _mockEntries() {
     return const [
       TimetableEntry(
         id: '11111111-1111-1111-1111-111111111111',
-        subjectCode: 'DED10044',
-        subjectName: 'Teknologi Pendawaian Elektrik',
-        departmentUnit: 'DED',
+        subjectCode: 'DGS1013',
+        subjectName: 'Asas Pengaturcaraan',
+        departmentUnit: 'DGS',
         lecturerId: 'mock-user-id',
         lecturerName: 'Pn. Syarifah',
         day: 'Isnin',
         startTime: '08:00:00',
-        endTime: '12:00:00',
+        endTime: '10:00:00',
         roomId: 1,
-        roomName: 'Wiring Bay 3',
+        roomName: 'Bilik Kuliah 1',
         session: 'JAN-JUN 2026',
+        kelas: 'DGS4A',
       ),
       TimetableEntry(
         id: '22222222-2222-2222-2222-222222222222',
-        subjectCode: 'DUM10122',
-        subjectName: 'Matematik Kejuruteraan',
-        departmentUnit: 'DED',
+        subjectCode: 'DGS2023',
+        subjectName: 'Sistem Pangkalan Data',
+        departmentUnit: 'DGS',
         lecturerId: 'mock-user-id-2',
-        lecturerName: 'Pn. Rafidah',
-        day: 'Rabu',
-        startTime: '08:00:00',
-        endTime: '10:00:00',
+        lecturerName: 'En. Rafidah',
+        day: 'Selasa',
+        startTime: '10:00:00',
+        endTime: '12:00:00',
         roomId: 2,
-        roomName: 'PA BK 13',
+        roomName: 'Comp Lab 1',
         session: 'JAN-JUN 2026',
+        kelas: 'DGS4B',
       ),
       TimetableEntry(
         id: '33333333-3333-3333-3333-333333333333',
-        subjectCode: 'DKV10213',
-        subjectName: 'Mesin Elektrik',
-        departmentUnit: 'DED',
+        subjectCode: 'DPP1013',
+        subjectName: 'Asas Pemasaran',
+        departmentUnit: 'DPP',
         lecturerId: 'mock-user-id-3',
         lecturerName: 'Pn. Norhatini',
         day: 'Rabu',
-        startTime: '10:00:00',
-        endTime: '13:00:00',
+        startTime: '14:00:00',
+        endTime: '16:00:00',
         roomId: 3,
-        roomName: 'Elec Machine Lab',
+        roomName: 'Bilik Kuliah 2',
         session: 'JAN-JUN 2026',
+        kelas: 'DPP4A',
       ),
     ];
   }
 }
 
-// ─────────────────────────────────────────────
-// STATS MODEL
-// ─────────────────────────────────────────────
+// ─── STATS MODEL ─────────────────────────────────────────
 class TimetableStats {
   final int totalClasses;
   final int roomsInUse;
