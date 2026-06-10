@@ -40,10 +40,12 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
   TimeOfDay _end = const TimeOfDay(hour: 10, minute: 0);
   int? _roomId;
   String? _lecturerId;
+  String? _kelas; // selected kelas from students table
 
   // Data
   List<Room> _rooms = const [];
   List<UserProfile> _lecturers = const [];
+  List<String> _kelasList = const []; // distinct kelas from students
   List<TimetableEntry> _entries = const [];
   TimetableStats _stats = const TimetableStats(
     totalClasses: 0,
@@ -57,12 +59,12 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
   bool _saving = false;
   String _searchQuery = '';
   String? _filterDay;
+  String? _filterKelas;
 
   @override
   void initState() {
     super.initState();
     final user = context.read<UserProvider>().profile;
-    // Lock Ketua Program to their own unit
     if (user?.role == 'Ketua Program' && user?.departmentUnit != null) {
       _unit = user!.departmentUnit!;
     }
@@ -77,13 +79,14 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
     super.dispose();
   }
 
-  // ─── DATA LOADING ───────────────────────────────────────
+  // ─── DATA LOADING ─────────────────────────────────────────
 
   Future<void> _bootstrap() async {
     setState(() => _loading = true);
     await Future.wait([
       _loadRooms(),
       _loadLecturers(),
+      _loadKelas(),
       _loadEntries(),
     ]);
     await _loadStats();
@@ -98,6 +101,15 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
     _lecturers = await _service.fetchLecturersByUnit(_unit);
   }
 
+  /// Load distinct kelas values from students table for selected unit
+  Future<void> _loadKelas() async {
+    _kelasList = await _service.fetchKelasByUnit(_unit);
+    // Reset kelas selection if current value no longer valid
+    if (_kelas != null && !_kelasList.contains(_kelas)) {
+      _kelas = null;
+    }
+  }
+
   Future<void> _loadEntries() async {
     _entries = await _service.fetchAllTimetable(
       departmentUnit: _scopeUnit(),
@@ -108,14 +120,13 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
     _stats = await _service.fetchStats(departmentUnit: _scopeUnit());
   }
 
-  /// Returns the unit filter to apply — null means Admin sees everything.
   String? _scopeUnit() {
     final user = context.read<UserProvider>().profile;
     if (user?.role == 'Ketua Program') return user?.departmentUnit;
     return null;
   }
 
-  // ─── FORM HELPERS ────────────────────────────────────────
+  // ─── FORM HELPERS ──────────────────────────────────────────
 
   String _formatTime(TimeOfDay t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:00';
@@ -140,24 +151,28 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
     });
   }
 
-  // ─── SUBMIT ──────────────────────────────────────────────
+  // ─── SUBMIT ────────────────────────────────────────────────
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
+    if (_kelas == null) {
+      _showSnack('Sila pilih kelas / Please select a class.', isError: true);
+      return;
+    }
     if (_roomId == null) {
       _showSnack('Sila pilih bilik / Please select a room.', isError: true);
       return;
     }
     if (_lecturerId == null) {
-      _showSnack('Sila pilih pensyarah / Please select a lecturer.',
-          isError: true);
+      _showSnack('Sila pilih pensyarah / Please select a lecturer.', isError: true);
       return;
     }
     if (!_endAfterStart()) {
       _showSnack(
-          'Waktu tamat mesti selepas waktu mula / End time must be after start time.',
-          isError: true);
+        'Waktu tamat mesti selepas waktu mula / End time must be after start time.',
+        isError: true,
+      );
       return;
     }
 
@@ -166,7 +181,6 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
       final startStr = _formatTime(_start);
       final endStr = _formatTime(_end);
 
-      // Conflict check against timetable
       final free = await _service.isRoomSlotFree(
         roomId: _roomId!,
         day: _day,
@@ -195,9 +209,8 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
           startTime: startStr,
           endTime: endStr,
           roomId: _roomId,
-          session: _sessionCtrl.text.trim().isEmpty
-              ? null
-              : _sessionCtrl.text.trim(),
+          session: _sessionCtrl.text.trim().isEmpty ? null : _sessionCtrl.text.trim(),
+          kelas: _kelas,
         ),
         createdBy: user.id,
       );
@@ -209,6 +222,7 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
       setState(() {
         _lecturerId = null;
         _roomId = null;
+        _kelas = null;
       });
       await _bootstrap();
     } catch (e) {
@@ -218,15 +232,14 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
     }
   }
 
-  // ─── DELETE ──────────────────────────────────────────────
+  // ─── DELETE ────────────────────────────────────────────────
 
   Future<void> _confirmDelete(TimetableEntry e) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Padam Entri?'),
-        content: Text(
-            'Padam ${e.subjectCode} – ${e.subjectName}\n${e.day} ${e.timeSlot}?'),
+        content: Text('Padam ${e.subjectCode} – ${e.subjectName}\n${e.day} ${e.timeSlot}?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -246,7 +259,7 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
     await _bootstrap();
   }
 
-  // ─── FILTER ──────────────────────────────────────────────
+  // ─── FILTER ────────────────────────────────────────────────
 
   List<TimetableEntry> get _filteredEntries {
     return _entries.where((e) {
@@ -255,13 +268,13 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
           e.subjectCode.toLowerCase().contains(q) ||
           e.subjectName.toLowerCase().contains(q) ||
           (e.lecturerName ?? '').toLowerCase().contains(q) ||
-          (e.roomName ?? '').toLowerCase().contains(q);
+          (e.roomName ?? '').toLowerCase().contains(q) ||
+          (e.kelas ?? '').toLowerCase().contains(q);
       final matchDay = _filterDay == null || e.day == _filterDay;
-      return matchSearch && matchDay;
+      final matchKelas = _filterKelas == null || e.kelas == _filterKelas;
+      return matchSearch && matchDay && matchKelas;
     }).toList();
   }
-
-  // ─── HELPERS ─────────────────────────────────────────────
 
   void _showSnack(String msg, {bool isError = false}) {
     if (!mounted) return;
@@ -271,13 +284,12 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
     ));
   }
 
-  // ─── BUILD ───────────────────────────────────────────────
+  // ─── BUILD ─────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     final user = context.watch<UserProvider>().profile;
-    final canWrite =
-        user?.role == 'Admin' || user?.role == 'Ketua Program';
+    final canWrite = user?.role == 'Admin' || user?.role == 'Ketua Program';
 
     return AppScaffold(
       title: 'Muat Naik Jadual Waktu / Upload Timetable',
@@ -298,21 +310,14 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // ── Stats Bar ──
                       _buildStatsBar(),
                       const SizedBox(height: 20),
-
-                      // ── Form (write roles only) ──
                       if (canWrite) ...[
                         _buildForm(),
                         const SizedBox(height: 24),
                       ],
-
-                      // ── List header + search ──
                       _buildListHeader(),
                       const SizedBox(height: 12),
-
-                      // ── Timetable list ──
                       _buildList(canWrite),
                     ],
                   ),
@@ -322,22 +327,18 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
     );
   }
 
-  // ─── STATS BAR ───────────────────────────────────────────
+  // ─── STATS BAR ─────────────────────────────────────────────
 
   Widget _buildStatsBar() {
     return Row(
       children: [
-        _statCard('Jumlah Kelas', _stats.totalClasses.toString(),
-            Icons.class_, AppTheme.navy),
+        _statCard('Jumlah Kelas', _stats.totalClasses.toString(), Icons.class_, AppTheme.navy),
         const SizedBox(width: 12),
-        _statCard('Bilik Digunakan', _stats.roomsInUse.toString(),
-            Icons.meeting_room, AppTheme.teal),
+        _statCard('Bilik Digunakan', _stats.roomsInUse.toString(), Icons.meeting_room, AppTheme.teal),
         const SizedBox(width: 12),
-        _statCard('Pensyarah Dijadualkan', _stats.lecturersScheduled.toString(),
-            Icons.person, AppTheme.tealDark),
+        _statCard('Pensyarah Dijadualkan', _stats.lecturersScheduled.toString(), Icons.person, AppTheme.tealDark),
         const SizedBox(width: 12),
-        _statCard('Kelas Hari Ini', _stats.classesToday.toString(),
-            Icons.today, AppTheme.mc),
+        _statCard('Kelas Hari Ini', _stats.classesToday.toString(), Icons.today, AppTheme.mc),
       ],
     );
   }
@@ -354,14 +355,8 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(value,
-                      style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          color: color)),
-                  Text(label,
-                      style: const TextStyle(
-                          fontSize: 11, color: AppTheme.textMuted)),
+                  Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: color)),
+                  Text(label, style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
                 ],
               ),
             ],
@@ -371,7 +366,7 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
     );
   }
 
-  // ─── FORM ────────────────────────────────────────────────
+  // ─── FORM ──────────────────────────────────────────────────
 
   Widget _buildForm() {
     return Card(
@@ -384,10 +379,7 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
             children: [
               const Text(
                 'Tambah Entri Jadual / Add Timetable Entry',
-                style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                    color: AppTheme.navy),
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: AppTheme.navy),
               ),
               const SizedBox(height: 16),
               Wrap(
@@ -399,10 +391,8 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
                     width: 200,
                     child: TextFormField(
                       controller: _codeCtrl,
-                      decoration:
-                          const InputDecoration(labelText: 'Kod Subjek / Subject Code'),
-                      validator: (v) =>
-                          (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null,
+                      decoration: const InputDecoration(labelText: 'Kod Subjek / Subject Code'),
+                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null,
                     ),
                   ),
                   // Subject Name
@@ -410,32 +400,42 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
                     width: 280,
                     child: TextFormField(
                       controller: _nameCtrl,
-                      decoration: const InputDecoration(
-                          labelText: 'Nama Subjek / Subject Name'),
-                      validator: (v) =>
-                          (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null,
+                      decoration: const InputDecoration(labelText: 'Nama Subjek / Subject Name'),
+                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null,
                     ),
                   ),
-                  // Unit
+                  // Unit / Jabatan
                   _wrapField(
                     width: 160,
                     child: DropdownButtonFormField<String>(
                       value: _unit,
-                      decoration:
-                          const InputDecoration(labelText: 'Jabatan / Unit'),
+                      decoration: const InputDecoration(labelText: 'Jabatan / Unit'),
                       items: kJabatanList
-                          .map((u) =>
-                              DropdownMenuItem(value: u, child: Text(u)))
+                          .map((u) => DropdownMenuItem(value: u, child: Text(u)))
                           .toList(),
                       onChanged: (v) async {
                         if (v == null) return;
                         setState(() {
                           _unit = v;
                           _lecturerId = null;
+                          _kelas = null;
                         });
-                        await _loadLecturers();
+                        await Future.wait([_loadLecturers(), _loadKelas()]);
                         setState(() {});
                       },
+                    ),
+                  ),
+                  // Kelas — fetched from students table
+                  _wrapField(
+                    width: 160,
+                    child: DropdownButtonFormField<String>(
+                      value: _kelas,
+                      decoration: const InputDecoration(labelText: 'Kelas / Class'),
+                      hint: const Text('Pilih kelas'),
+                      items: _kelasList
+                          .map((k) => DropdownMenuItem(value: k, child: Text(k)))
+                          .toList(),
+                      onChanged: (v) => setState(() => _kelas = v),
                     ),
                   ),
                   // Lecturer — fetched from profiles
@@ -443,14 +443,10 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
                     width: 260,
                     child: DropdownButtonFormField<String>(
                       value: _lecturerId,
-                      decoration: const InputDecoration(
-                          labelText: 'Pensyarah / Lecturer'),
+                      decoration: const InputDecoration(labelText: 'Pensyarah / Lecturer'),
                       hint: const Text('Pilih pensyarah'),
                       items: _lecturers
-                          .map((l) => DropdownMenuItem(
-                                value: l.id,
-                                child: Text(l.fullName),
-                              ))
+                          .map((l) => DropdownMenuItem(value: l.id, child: Text(l.fullName)))
                           .toList(),
                       onChanged: (v) => setState(() => _lecturerId = v),
                     ),
@@ -460,14 +456,11 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
                     width: 150,
                     child: DropdownButtonFormField<String>(
                       value: _day,
-                      decoration:
-                          const InputDecoration(labelText: 'Hari / Day'),
+                      decoration: const InputDecoration(labelText: 'Hari / Day'),
                       items: kHariList
-                          .map((d) =>
-                              DropdownMenuItem(value: d, child: Text(d)))
+                          .map((d) => DropdownMenuItem(value: d, child: Text(d)))
                           .toList(),
-                      onChanged: (v) =>
-                          setState(() => _day = v ?? _day),
+                      onChanged: (v) => setState(() => _day = v ?? _day),
                     ),
                   ),
                   // Start time
@@ -493,14 +486,10 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
                     width: 220,
                     child: DropdownButtonFormField<int>(
                       value: _roomId,
-                      decoration:
-                          const InputDecoration(labelText: 'Bilik / Room'),
+                      decoration: const InputDecoration(labelText: 'Bilik / Room'),
                       hint: const Text('Pilih bilik'),
                       items: _rooms
-                          .map((r) => DropdownMenuItem(
-                                value: r.id,
-                                child: Text(r.roomName),
-                              ))
+                          .map((r) => DropdownMenuItem(value: r.id, child: Text(r.roomName)))
                           .toList(),
                       onChanged: (v) => setState(() => _roomId = v),
                     ),
@@ -511,8 +500,9 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
                     child: TextFormField(
                       controller: _sessionCtrl,
                       decoration: const InputDecoration(
-                          labelText: 'Sesi / Session',
-                          hintText: 'JAN-JUN 2026'),
+                        labelText: 'Sesi / Session',
+                        hintText: 'JAN-JUN 2026',
+                      ),
                     ),
                   ),
                 ],
@@ -526,8 +516,7 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
                       ? const SizedBox(
                           height: 16,
                           width: 16,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                         )
                       : const Icon(Icons.save),
                   label: Text(_saving ? 'Menyimpan...' : 'Simpan Entri'),
@@ -544,7 +533,7 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
     return SizedBox(width: width, child: child);
   }
 
-  // ─── LIST HEADER + SEARCH ────────────────────────────────
+  // ─── LIST HEADER ───────────────────────────────────────────
 
   Widget _buildListHeader() {
     return Column(
@@ -552,51 +541,77 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
       children: [
         const Text(
           'Senarai Jadual / Timetable List',
-          style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: AppTheme.navy),
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppTheme.navy),
         ),
         const SizedBox(height: 10),
-        Row(
-          children: [
-            // Search bar
-            Expanded(
-              child: TextField(
-                decoration: const InputDecoration(
-                  hintText: 'Cari subjek, pensyarah, bilik...',
-                  prefixIcon: Icon(Icons.search),
-                ),
-                onChanged: (v) => setState(() => _searchQuery = v),
+        // Search bar
+        TextField(
+          decoration: const InputDecoration(
+            hintText: 'Cari subjek, pensyarah, bilik, kelas...',
+            prefixIcon: Icon(Icons.search),
+          ),
+          onChanged: (v) => setState(() => _searchQuery = v),
+        ),
+        const SizedBox(height: 8),
+        // Day filter chips
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              const Text('Hari: ', style: TextStyle(fontSize: 13, color: AppTheme.textMuted)),
+              FilterChip(
+                label: const Text('Semua'),
+                selected: _filterDay == null,
+                onSelected: (_) => setState(() => _filterDay = null),
+                selectedColor: AppTheme.teal.withOpacity(0.2),
               ),
-            ),
-            const SizedBox(width: 12),
-            // Day filter chips
-            Wrap(
-              spacing: 6,
-              children: [
-                FilterChip(
-                  label: const Text('Semua'),
-                  selected: _filterDay == null,
-                  onSelected: (_) => setState(() => _filterDay = null),
-                  selectedColor: AppTheme.teal.withOpacity(0.2),
-                ),
-                ...kHariList.map((d) => FilterChip(
+              const SizedBox(width: 6),
+              ...kHariList.map((d) => Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: FilterChip(
                       label: Text(d),
                       selected: _filterDay == d,
                       onSelected: (_) =>
                           setState(() => _filterDay = _filterDay == d ? null : d),
                       selectedColor: AppTheme.teal.withOpacity(0.2),
+                    ),
+                  )),
+            ],
+          ),
+        ),
+        const SizedBox(height: 4),
+        // Kelas filter chips
+        if (_kelasList.isNotEmpty)
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                const Text('Kelas: ', style: TextStyle(fontSize: 13, color: AppTheme.textMuted)),
+                FilterChip(
+                  label: const Text('Semua'),
+                  selected: _filterKelas == null,
+                  onSelected: (_) => setState(() => _filterKelas = null),
+                  selectedColor: AppTheme.teal.withOpacity(0.2),
+                ),
+                const SizedBox(width: 6),
+                ..._kelasList.map((k) => Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: FilterChip(
+                        label: Text(k),
+                        selected: _filterKelas == k,
+                        onSelected: (_) =>
+                            setState(() => _filterKelas = _filterKelas == k ? null : k),
+                        selectedColor: AppTheme.teal.withOpacity(0.2),
+                      ),
                     )),
               ],
             ),
-          ],
-        ),
+          ),
       ],
     );
   }
 
-  // ─── LIST TABLE ──────────────────────────────────────────
+  // ─── LIST TABLE ────────────────────────────────────────────
 
   Widget _buildList(bool canWrite) {
     final filtered = _filteredEntries;
@@ -619,13 +634,13 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: DataTable(
-          headingTextStyle: const TextStyle(
-              fontWeight: FontWeight.w700, color: AppTheme.navy),
+          headingTextStyle: const TextStyle(fontWeight: FontWeight.w700, color: AppTheme.navy),
           dataRowMinHeight: 48,
           dataRowMaxHeight: 56,
           columns: const [
             DataColumn(label: Text('Kod / Code')),
             DataColumn(label: Text('Nama Subjek / Subject')),
+            DataColumn(label: Text('Kelas')),
             DataColumn(label: Text('Unit')),
             DataColumn(label: Text('Pensyarah / Lecturer')),
             DataColumn(label: Text('Hari / Day')),
@@ -639,6 +654,7 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
               DataCell(Text(e.subjectCode,
                   style: const TextStyle(fontWeight: FontWeight.w600))),
               DataCell(Text(e.subjectName)),
+              DataCell(_kelasBadge(e.kelas ?? '-')),
               DataCell(_unitBadge(e.departmentUnit)),
               DataCell(Text(e.lecturerName ?? '-')),
               DataCell(Text(e.day)),
@@ -649,8 +665,7 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
                 canWrite
                     ? IconButton(
                         tooltip: 'Padam / Delete',
-                        icon: const Icon(Icons.delete_outline,
-                            color: AppTheme.tidakHadir),
+                        icon: const Icon(Icons.delete_outline, color: AppTheme.tidakHadir),
                         onPressed: () => _confirmDelete(e),
                       )
                     : const SizedBox.shrink(),
@@ -670,10 +685,19 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(unit,
-          style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.tealDark)),
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.tealDark)),
+    );
+  }
+
+  Widget _kelasBadge(String kelas) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppTheme.navy.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(kelas,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.navy)),
     );
   }
 }
