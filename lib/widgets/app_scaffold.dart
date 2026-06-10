@@ -232,6 +232,12 @@ class _SidebarContent extends StatelessWidget {
           allowedRoles: ['Admin'],
         ),
         _NavItem(
+          route: '/admin-booking-monitor',
+          icon: Icons.analytics_outlined,
+          label: 'Pemantauan Tempahan Bilik',
+          allowedRoles: ['Admin'],
+        ),
+        _NavItem(
           route: '/admin-rooms',
           icon: Icons.door_front_door,
           label: 'Urus Bilik',

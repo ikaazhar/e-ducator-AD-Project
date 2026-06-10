@@ -107,37 +107,44 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
             _classDropdown(),
             _sectionDropdown(),
             _dateFilterButton(
-              label: _dateFrom == null
-                  ? 'Tarikh Dari'
-                  : DateFormat('d MMM yyyy', 'ms').format(_dateFrom!),
+              label: _dateLabel(_dateFrom, fallback: 'Tarikh Dari'),
               onPressed: () async {
+                final today = _dateOnly(DateTime.now());
+                final firstDate = DateTime(2020);
+                final lastDate = _dateTo ?? today;
                 final selected = await showDatePicker(
                   context: context,
-                  initialDate: _dateFrom ?? DateTime.now(),
-                  firstDate: DateTime(2020),
-                  lastDate: DateTime.now(),
-                  locale: const Locale('ms'),
+                  initialDate: _boundedInitialDate(
+                    _dateFrom ?? lastDate,
+                    firstDate: firstDate,
+                    lastDate: lastDate,
+                  ),
+                  firstDate: firstDate,
+                  lastDate: lastDate,
                 );
                 if (selected != null) {
-                  setState(() => _dateFrom = selected);
+                  setState(() => _dateFrom = _dateOnly(selected));
                   await _reloadData();
                 }
               },
             ),
             _dateFilterButton(
-              label: _dateTo == null
-                  ? 'Tarikh Hingga'
-                  : DateFormat('d MMM yyyy', 'ms').format(_dateTo!),
+              label: _dateLabel(_dateTo, fallback: 'Tarikh Hingga'),
               onPressed: () async {
+                final today = _dateOnly(DateTime.now());
+                final firstDate = _dateFrom ?? DateTime(2020);
                 final selected = await showDatePicker(
                   context: context,
-                  initialDate: _dateTo ?? DateTime.now(),
-                  firstDate: DateTime(2020),
-                  lastDate: DateTime.now(),
-                  locale: const Locale('ms'),
+                  initialDate: _boundedInitialDate(
+                    _dateTo ?? today,
+                    firstDate: firstDate,
+                    lastDate: today,
+                  ),
+                  firstDate: firstDate,
+                  lastDate: today,
                 );
                 if (selected != null) {
-                  setState(() => _dateTo = selected);
+                  setState(() => _dateTo = _dateOnly(selected));
                   await _reloadData();
                 }
               },
@@ -343,7 +350,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Wawasan AI (Simulasi)',
+                          'Ringkasan Automatik',
                           style: TextStyle(fontWeight: FontWeight.w700, color: AppTheme.navy),
                         ),
                         if (_selectedSubjectLabel != null)
@@ -390,7 +397,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Trend Kehadiran Mingguan',
+              'Trend Kehadiran Mengikut Tarikh',
               style: TextStyle(fontWeight: FontWeight.w700, color: AppTheme.navy),
             ),
             const SizedBox(height: 12),
@@ -445,7 +452,10 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
                                 }
                                 return SideTitleWidget(
                                   axisSide: meta.axisSide,
-                                  child: Text('M${index + 1}', style: const TextStyle(fontSize: 11)),
+                                  child: Text(
+                                    _trendDateLabel(_sessionTrend[index]['date']?.toString()),
+                                    style: const TextStyle(fontSize: 11),
+                                  ),
                                 );
                               },
                             ),
@@ -587,7 +597,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
                 height: 120,
                 alignment: Alignment.center,
                 child: const Text(
-                  'Pilih kelas untuk melihat carta perbandingan pelajar.',
+                  'Pilih subjek untuk melihat carta perbandingan pelajar.',
                   style: TextStyle(color: AppTheme.textMuted),
                   textAlign: TextAlign.center,
                 ),
@@ -684,9 +694,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
   }
 
   Widget _criticalStudentsTable() {
-    final criticalList = _filtered
-        .where((s) => s.totalAbsences > 0 && s.attendancePercent < 80)
-        .toList()
+    final criticalList = _criticalStudents
       ..sort((a, b) => a.attendancePercent.compareTo(b.attendancePercent));
 
     return Card(
@@ -973,16 +981,16 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
       timetableId: _selectedTimetableId,
       session: _selectedSession,
       section: _selectedSection,
-      dateFrom: _dateFrom?.toIso8601String().substring(0, 10),
-      dateTo: _dateTo?.toIso8601String().substring(0, 10),
+      dateFrom: _dateParam(_dateFrom),
+      dateTo: _dateParam(_dateTo),
     );
     final sessionTrend = await _service.fetchRawSessionTrend(
       user,
       timetableId: _selectedTimetableId,
       session: _selectedSession,
       section: _selectedSection,
-      dateFrom: _dateFrom?.toIso8601String().substring(0, 10),
-      dateTo: _dateTo?.toIso8601String().substring(0, 10),
+      dateFrom: _dateParam(_dateFrom),
+      dateTo: _dateParam(_dateTo),
     );
 
     if (!mounted) return;
@@ -1014,16 +1022,16 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
       timetableId: _selectedTimetableId,
       session: _selectedSession,
       section: _selectedSection,
-      dateFrom: _dateFrom?.toIso8601String().substring(0, 10),
-      dateTo: _dateTo?.toIso8601String().substring(0, 10),
+      dateFrom: _dateParam(_dateFrom),
+      dateTo: _dateParam(_dateTo),
     );
     final sessionTrend = await _service.fetchRawSessionTrend(
       user,
       timetableId: _selectedTimetableId,
       session: _selectedSession,
       section: _selectedSection,
-      dateFrom: _dateFrom?.toIso8601String().substring(0, 10),
-      dateTo: _dateTo?.toIso8601String().substring(0, 10),
+      dateFrom: _dateParam(_dateFrom),
+      dateTo: _dateParam(_dateTo),
     );
 
     if (!mounted) return;
@@ -1035,6 +1043,12 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
   }
 
   List<AttendanceSummary> get _filtered => _summaries;
+
+  List<AttendanceSummary> get _withAttendance =>
+      _filtered.where(_hasAttendanceRecord).toList();
+
+  List<AttendanceSummary> get _criticalStudents =>
+      _withAttendance.where((s) => s.attendancePercent < 80).toList();
 
   int get _totalStudents => _filtered.length;
 
@@ -1048,10 +1062,10 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
       _filtered.fold(0, (sum, s) => sum + s.totalAbsences);
 
   int get _below80Count =>
-      _filtered.where((s) => s.attendancePercent < 80).length;
+      _criticalStudents.length;
 
   int get _activeWarnings =>
-      _filtered.where((s) => s.warningLevel > 0).length;
+      _withAttendance.where((s) => s.warningLevel > 0).length;
 
   Map<String, int> get _statusTotals {
     final totals = {'hadir': 0, 'takHadir': 0, 'mc': 0, 'ck': 0};
@@ -1066,7 +1080,8 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
 
   List<String> get _insights {
     final insights = <String>[];
-    final highRiskCount = _filtered.where((s) => s.attendancePercent < 60).length;
+    final highRiskCount =
+        _withAttendance.where((s) => s.attendancePercent < 60).length;
     if (highRiskCount > 0) {
       insights.add('$highRiskCount pelajar berisiko tinggi dari segi kehadiran.');
     }
@@ -1100,7 +1115,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
       insights.add('Kebanyakan ketidakhadiran disertai MC (${_statusTotals['mc']} kes).');
     }
 
-    final level3Count = _filtered.where((s) => s.warningLevel == 3).length;
+    final level3Count = _withAttendance.where((s) => s.warningLevel == 3).length;
     if (level3Count > 0) {
       insights.add('Disyorkan menghantar surat amaran kepada $level3Count pelajar Tahap 3.');
     }
@@ -1112,15 +1127,23 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
     return insights;
   }
 
+  bool _hasAttendanceRecord(AttendanceSummary summary) {
+    return summary.totalAbsences > 0 || summary.attendancePercent > 0;
+  }
+
+  String _trendDateLabel(String? value) {
+    final parsed = value == null ? null : DateTime.tryParse(value);
+    if (parsed == null) return '';
+    return DateFormat('d/M').format(parsed);
+  }
+
   Future<void> _exportPdf(BuildContext context) async {
     try {
       final now = DateTime.now();
       final dateLabel = DateFormat('d MMM yyyy HH:mm', 'ms').format(now);
       final filename =
           'laporan-kehadiran-${DateFormat('yyyyMMdd-HHmm').format(now)}.pdf';
-      final criticalCount = _filtered
-          .where((s) => s.totalAbsences > 0 && s.attendancePercent < 80)
-          .length;
+      final criticalCount = _criticalStudents.length;
       final totals = _statusTotals;
       final pdf = pw.Document();
 
@@ -1175,7 +1198,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
               ],
             ),
             pw.SizedBox(height: 14),
-            _pdfSectionTitle('Wawasan'),
+            _pdfSectionTitle('Ringkasan Automatik'),
             ..._insights.map((insight) => pw.Bullet(text: insight)),
             pw.SizedBox(height: 14),
             _pdfSectionTitle('Senarai Pelajar'),
@@ -1251,9 +1274,34 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
       'Sesi: ${_selectedSession ?? "Semua"}',
       'Subjek: ${_selectedSubjectLabel ?? "Semua"}',
       'Seksyen: ${_selectedSection ?? "Semua"}',
-      'Tarikh Dari: ${_dateFrom == null ? "Semua" : DateFormat('d MMM yyyy', 'ms').format(_dateFrom!)}',
-      'Tarikh Hingga: ${_dateTo == null ? "Semua" : DateFormat('d MMM yyyy', 'ms').format(_dateTo!)}',
+      'Tarikh Dari: ${_dateLabel(_dateFrom, fallback: "Semua")}',
+      'Tarikh Hingga: ${_dateLabel(_dateTo, fallback: "Semua")}',
     ];
     return parts.join(' | ');
+  }
+
+  DateTime _dateOnly(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
+  }
+
+  DateTime _boundedInitialDate(
+    DateTime date, {
+    required DateTime firstDate,
+    required DateTime lastDate,
+  }) {
+    final normalized = _dateOnly(date);
+    if (normalized.isBefore(firstDate)) return firstDate;
+    if (normalized.isAfter(lastDate)) return lastDate;
+    return normalized;
+  }
+
+  String? _dateParam(DateTime? date) {
+    return date == null ? null : DateFormat('yyyy-MM-dd').format(_dateOnly(date));
+  }
+
+  String _dateLabel(DateTime? date, {required String fallback}) {
+    return date == null
+        ? fallback
+        : DateFormat('d MMM yyyy', 'ms').format(_dateOnly(date));
   }
 }
