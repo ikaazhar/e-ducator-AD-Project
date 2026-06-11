@@ -77,14 +77,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
                   const SizedBox(height: 24),
                   _aiInsightPanel(),
                   const SizedBox(height: 24),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(child: _trendChart()),
-                      const SizedBox(width: 16),
-                      Expanded(child: _statusPieChart()),
-                    ],
-                  ),
+                  _chartSection(),
                   const SizedBox(height: 24),
                   _classComparisonChart(),
                   const SizedBox(height: 24),
@@ -389,6 +382,31 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
     );
   }
 
+  Widget _chartSection() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 900) {
+          return Column(
+            children: [
+              _trendChart(),
+              const SizedBox(height: 16),
+              _statusPieChart(),
+            ],
+          );
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: _trendChart()),
+            const SizedBox(width: 16),
+            Expanded(child: _statusPieChart()),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _trendChart() {
     return Card(
       child: Padding(
@@ -414,7 +432,33 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
                       LineChartData(
                         minY: 0,
                         maxY: 100,
-                        lineTouchData: LineTouchData(enabled: false),
+                        lineTouchData: LineTouchData(
+                          touchTooltipData: LineTouchTooltipData(
+                            getTooltipItems: (spots) {
+                              return spots.map((spot) {
+                                final index = spot.x.toInt();
+                                if (index < 0 || index >= _sessionTrend.length) {
+                                  return null;
+                                }
+                                final row = _sessionTrend[index];
+                                final hadir = row['hadir'] as int? ?? 0;
+                                final takHadir = row['takHadir'] as int? ?? 0;
+                                final date = _trendDateLabel(
+                                  row['date']?.toString(),
+                                );
+                                return LineTooltipItem(
+                                  '$date\n${spot.y.toStringAsFixed(1)}%\n'
+                                  'Hadir: $hadir | Tak Hadir: $takHadir',
+                                  const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                );
+                              }).toList();
+                            },
+                          ),
+                        ),
                         gridData: const FlGridData(show: false),
                         borderData: FlBorderData(show: false),
                         extraLinesData: ExtraLinesData(
@@ -508,63 +552,59 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
             SizedBox(
               height: 240,
               child: hasData
-                  ? PieChart(
-                      PieChartData(
-                        sections: [
-                          if (totals['hadir']! > 0)
-                            PieChartSectionData(
-                              value: totals['hadir']!.toDouble(),
-                              color: AppTheme.hadir,
-                              title: 'Hadir\n${totals['hadir']}',
-                              radius: 60,
-                              titleStyle: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
+                  ? Row(
+                      children: [
+                        Expanded(
+                          child: PieChart(
+                            PieChartData(
+                              sections: [
+                                if (totals['hadir']! > 0)
+                                  _statusPieSection(
+                                    value: totals['hadir']!,
+                                    color: AppTheme.hadir,
+                                  ),
+                                if (totals['takHadir']! > 0)
+                                  _statusPieSection(
+                                    value: totals['takHadir']!,
+                                    color: AppTheme.tidakHadir,
+                                  ),
+                                if (totals['mc']! > 0)
+                                  _statusPieSection(
+                                    value: totals['mc']!,
+                                    color: AppTheme.mc,
+                                  ),
+                                if (totals['ck']! > 0)
+                                  _statusPieSection(
+                                    value: totals['ck']!,
+                                    color: AppTheme.ck,
+                                  ),
+                              ],
+                              centerSpaceRadius: 42,
+                              sectionsSpace: 2,
+                              borderData: FlBorderData(show: false),
+                              pieTouchData: PieTouchData(enabled: false),
                             ),
-                          if (totals['takHadir']! > 0)
-                            PieChartSectionData(
-                              value: totals['takHadir']!.toDouble(),
-                              color: AppTheme.tidakHadir,
-                              title: 'Tak Hadir\n${totals['takHadir']}',
-                              radius: 60,
-                              titleStyle: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        SizedBox(
+                          width: 120,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _statusLegend('Hadir', totals['hadir']!, AppTheme.hadir),
+                              _statusLegend(
+                                'Tak Hadir',
+                                totals['takHadir']!,
+                                AppTheme.tidakHadir,
                               ),
-                            ),
-                          if (totals['mc']! > 0)
-                            PieChartSectionData(
-                              value: totals['mc']!.toDouble(),
-                              color: AppTheme.mc,
-                              title: 'MC\n${totals['mc']}',
-                              radius: 60,
-                              titleStyle: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          if (totals['ck']! > 0)
-                            PieChartSectionData(
-                              value: totals['ck']!.toDouble(),
-                              color: AppTheme.ck,
-                              title: 'CK\n${totals['ck']}',
-                              radius: 60,
-                              titleStyle: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                        ],
-                        centerSpaceRadius: 36,
-                        sectionsSpace: 2,
-                        borderData: FlBorderData(show: false),
-                        pieTouchData: PieTouchData(enabled: false),
-                      ),
+                              _statusLegend('MC', totals['mc']!, AppTheme.mc),
+                              _statusLegend('CK', totals['ck']!, AppTheme.ck),
+                            ],
+                          ),
+                        ),
+                      ],
                     )
                   : const Center(
                       child: Text(
@@ -579,8 +619,60 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
     );
   }
 
+  PieChartSectionData _statusPieSection({
+    required int value,
+    required Color color,
+  }) {
+    return PieChartSectionData(
+      value: value.toDouble(),
+      color: color,
+      title: value.toString(),
+      radius: 62,
+      titleStyle: const TextStyle(
+        color: Colors.white,
+        fontSize: 12,
+        fontWeight: FontWeight.bold,
+      ),
+    );
+  }
+
+  Widget _statusLegend(String label, int value, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Text(
+            '$value',
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: AppTheme.navy,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _classComparisonChart() {
     final selected = _selectedTimetableId != null;
+    final lowestStudents = _lowestAttendanceStudents;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -588,7 +680,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Perbandingan Kehadiran Pelajar',
+              '10 Pelajar Kehadiran Terendah',
               style: TextStyle(fontWeight: FontWeight.w700, color: AppTheme.navy),
             ),
             const SizedBox(height: 12),
@@ -612,13 +704,23 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
                   textAlign: TextAlign.center,
                 ),
               )
+            else if (lowestStudents.isEmpty)
+              Container(
+                height: 120,
+                alignment: Alignment.center,
+                child: const Text(
+                  'Tiada rekod kehadiran untuk dibandingkan.',
+                  style: TextStyle(color: AppTheme.textMuted),
+                  textAlign: TextAlign.center,
+                ),
+              )
             else
               SizedBox(
                 height: 220,
                 child: BarChart(
                   BarChartData(
                     maxY: 100,
-                    barGroups: _filtered.asMap().entries.map((entry) {
+                    barGroups: lowestStudents.asMap().entries.map((entry) {
                       final summary = entry.value;
                       final color = summary.attendancePercent >= 80
                           ? AppTheme.hadir
@@ -648,10 +750,11 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
                           reservedSize: 32,
                           getTitlesWidget: (value, meta) {
                             final index = value.toInt();
-                            if (index < 0 || index >= _filtered.length) {
+                            if (index < 0 || index >= lowestStudents.length) {
                               return const SizedBox.shrink();
                             }
-                            final name = _filtered[index].studentName.split(' ').first;
+                            final name =
+                                lowestStudents[index].studentName.split(' ').first;
                             return SideTitleWidget(
                               axisSide: meta.axisSide,
                               child: Text(name, style: const TextStyle(fontSize: 10)),
@@ -753,37 +856,12 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
                     DataColumn(label: Text('Jumlah Tak Hadir')),
                     DataColumn(label: Text('Tahap Amaran')),
                     DataColumn(label: Text('Status Risiko')),
-                    DataColumn(label: Text('Tren Terkini')),
                     DataColumn(label: Text('Surat Amaran')),
                   ],
                   rows: criticalList.map((summary) {
                     final pctColor = summary.attendancePercent >= 60
                         ? AppTheme.mc
                         : AppTheme.tidakHadir;
-                    Widget trendIcon;
-                    if (_sessionTrend.length >= 2) {
-                      final last = _sessionTrend[_sessionTrend.length - 1];
-                      final prev = _sessionTrend[_sessionTrend.length - 2];
-                      double pct(Map<String, dynamic> row) {
-                        final hadir = row['hadir'] as int? ?? 0;
-                        final takHadir = row['takHadir'] as int? ?? 0;
-                        final total = hadir + takHadir;
-                        return total == 0 ? 100.0 : (hadir / total) * 100.0;
-                      }
-                      if (pct(last) > pct(prev)) {
-                        trendIcon = const Icon(Icons.trending_up,
-                            color: AppTheme.hadir, size: 18);
-                      } else if (pct(last) < pct(prev)) {
-                        trendIcon = const Icon(Icons.trending_down,
-                            color: AppTheme.tidakHadir, size: 18);
-                      } else {
-                        trendIcon = const Icon(Icons.trending_flat,
-                            color: AppTheme.textMuted, size: 18);
-                      }
-                    } else {
-                      trendIcon = const Icon(Icons.trending_flat,
-                          color: AppTheme.textMuted, size: 18);
-                    }
                     return DataRow(cells: [
                       DataCell(Text(
                         summary.studentName,
@@ -804,7 +882,6 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
                         summary.riskStatus,
                         style: TextStyle(color: pctColor, fontWeight: FontWeight.w600),
                       )),
-                      DataCell(trendIcon),
                       DataCell(TextButton(
                         onPressed: () => _previewLetter(context, summary),
                         child: const Text('Pratonton'),
@@ -1050,6 +1127,12 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
   List<AttendanceSummary> get _criticalStudents =>
       _withAttendance.where((s) => s.attendancePercent < 80).toList();
 
+  List<AttendanceSummary> get _lowestAttendanceStudents {
+    final students = [..._withAttendance]
+      ..sort((a, b) => a.attendancePercent.compareTo(b.attendancePercent));
+    return students.take(10).toList();
+  }
+
   int get _totalStudents => _filtered.length;
 
   double get _overallPercent {
@@ -1098,9 +1181,9 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
       final lowest = trendWithPercent.reduce((a, b) =>
           (a['percent'] as double) < (b['percent'] as double) ? a : b);
       if ((lowest['percent'] as double) < 80) {
-        final index = trendWithPercent.indexOf(lowest);
+        final date = _trendDateLabel(lowest['date'] as String?);
         insights.add(
-          'Kehadiran paling rendah pada Minggu ${index + 1} (${(lowest['percent'] as double).toStringAsFixed(1)}%).',
+          'Kehadiran paling rendah pada $date (${(lowest['percent'] as double).toStringAsFixed(1)}%).',
         );
       }
     }
@@ -1150,95 +1233,50 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
       pdf.addPage(
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.all(28),
+          margin: const pw.EdgeInsets.symmetric(horizontal: 32, vertical: 30),
+          footer: (context) => _pdfFooter(context),
           build: (context) => [
-            pw.Text(
-              'Laporan Kehadiran',
-              style: pw.TextStyle(
-                fontSize: 22,
-                fontWeight: pw.FontWeight.bold,
+            _pdfHeader(dateLabel),
+            pw.SizedBox(height: 14),
+            _pdfFilterTags(),
+            pw.SizedBox(height: 16),
+            _pdfKpiCards(criticalCount),
+            pw.SizedBox(height: 18),
+            _pdfSectionTitle('Ringkasan Automatik'),
+            ..._insights.map(
+              (insight) => pw.Padding(
+                padding: const pw.EdgeInsets.only(bottom: 5),
+                child: pw.Bullet(
+                  text: insight,
+                  style: const pw.TextStyle(
+                    fontSize: 9,
+                    color: PdfColors.blueGrey800,
+                  ),
+                ),
               ),
             ),
-            pw.SizedBox(height: 4),
-            pw.Text('Dijana pada $dateLabel'),
-            pw.SizedBox(height: 14),
-            _pdfSectionTitle('Ringkasan'),
-            pw.TableHelper.fromTextArray(
-              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-              headerDecoration:
-                  const pw.BoxDecoration(color: PdfColors.grey300),
-              cellAlignment: pw.Alignment.centerLeft,
-              data: [
-                ['Metrik', 'Nilai'],
-                ['Jumlah Pelajar', '$_totalStudents'],
-                [
-                  'Kehadiran Keseluruhan',
-                  '${_overallPercent.toStringAsFixed(1)}%',
-                ],
-                ['Jumlah Tak Hadir', '$_totalAbsences'],
-                ['Pelajar Kritikal', '$criticalCount'],
-                ['Kes Amaran Aktif', '$_activeWarnings'],
-              ],
-            ),
-            pw.SizedBox(height: 14),
-            _pdfSectionTitle('Filter'),
-            pw.Text(_pdfFilterSummary()),
             pw.SizedBox(height: 14),
             _pdfSectionTitle('Taburan Status'),
-            pw.TableHelper.fromTextArray(
-              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-              headerDecoration:
-                  const pw.BoxDecoration(color: PdfColors.grey300),
-              data: [
-                ['Status', 'Jumlah'],
-                ['Hadir', '${totals['hadir']}'],
-                ['Tak Hadir', '${totals['takHadir']}'],
-                ['MC', '${totals['mc']}'],
-                ['CK', '${totals['ck']}'],
-              ],
-            ),
-            pw.SizedBox(height: 14),
-            _pdfSectionTitle('Ringkasan Automatik'),
-            ..._insights.map((insight) => pw.Bullet(text: insight)),
-            pw.SizedBox(height: 14),
-            _pdfSectionTitle('Senarai Pelajar'),
-            pw.TableHelper.fromTextArray(
-              headerStyle: pw.TextStyle(
-                fontWeight: pw.FontWeight.bold,
-                color: PdfColors.white,
+            _pdfStatusBlocks(totals),
+            pw.SizedBox(height: 18),
+            _pdfSectionTitle('Senarai Pelajar Kritikal'),
+            _criticalStudents.isEmpty
+                ? _pdfEmptyState(
+                    'Tiada pelajar kritikal untuk skop laporan semasa.',
+                  )
+                : _pdfStudentTable(_criticalStudents, highlightAttendance: true),
+            pw.SizedBox(height: 18),
+            _pdfSectionTitle('Senarai Semua Pelajar'),
+            _filtered.isEmpty
+                ? _pdfEmptyState('Tiada pelajar untuk skop laporan semasa.')
+                : _pdfStudentTable(_filtered),
+            pw.SizedBox(height: 8),
+            pw.Text(
+              'Nota: warna kehadiran digunakan pada senarai pelajar kritikal sahaja. Ambang amaran: >95% Selamat, >90%-95% Amaran 1, >80%-90% Amaran 2, <=80% Amaran 3.',
+              style: const pw.TextStyle(
+                fontSize: 7.5,
+                color: PdfColors.grey700,
               ),
-              headerDecoration:
-                  const pw.BoxDecoration(color: PdfColors.blueGrey800),
-              cellStyle: const pw.TextStyle(fontSize: 9),
-              cellAlignment: pw.Alignment.centerLeft,
-              columnWidths: {
-                0: const pw.FlexColumnWidth(2.4),
-                1: const pw.FlexColumnWidth(1.3),
-                2: const pw.FlexColumnWidth(1.1),
-                3: const pw.FlexColumnWidth(1.0),
-                4: const pw.FlexColumnWidth(1.0),
-                5: const pw.FlexColumnWidth(1.2),
-              },
-              data: [
-                [
-                  'Nama',
-                  'ID Pelajar',
-                  'Kelas',
-                  'Kehadiran',
-                  'Tak Hadir',
-                  'Risiko',
-                ],
-                ..._filtered.map(
-                  (summary) => [
-                    summary.studentName,
-                    summary.studentId,
-                    summary.classId,
-                    '${summary.attendancePercent.toStringAsFixed(1)}%',
-                    '${summary.totalAbsences}',
-                    summary.riskStatus,
-                  ],
-                ),
-              ],
             ),
           ],
         ),
@@ -1261,23 +1299,438 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
 
   pw.Widget _pdfSectionTitle(String text) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.only(bottom: 6),
-      child: pw.Text(
-        text,
-        style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+      padding: const pw.EdgeInsets.only(bottom: 7),
+      child: pw.Row(
+        children: [
+          pw.Container(width: 3, height: 12, color: PdfColors.blueGrey700),
+          pw.SizedBox(width: 7),
+          pw.Text(
+            text,
+            style: pw.TextStyle(
+              fontSize: 12,
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColors.blueGrey900,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  String _pdfFilterSummary() {
-    final parts = <String>[
-      'Sesi: ${_selectedSession ?? "Semua"}',
-      'Subjek: ${_selectedSubjectLabel ?? "Semua"}',
-      'Seksyen: ${_selectedSection ?? "Semua"}',
-      'Tarikh Dari: ${_dateLabel(_dateFrom, fallback: "Semua")}',
-      'Tarikh Hingga: ${_dateLabel(_dateTo, fallback: "Semua")}',
+  pw.Widget _pdfHeader(String dateLabel) {
+    return pw.Container(
+      width: double.infinity,
+      padding: const pw.EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: pw.BoxDecoration(
+        color: PdfColors.blueGrey900,
+        borderRadius: pw.BorderRadius.circular(6),
+      ),
+      child: pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Container(
+            width: 36,
+            height: 36,
+            alignment: pw.Alignment.center,
+            decoration: pw.BoxDecoration(
+              color: PdfColors.blueGrey700,
+              borderRadius: pw.BorderRadius.circular(6),
+            ),
+            child: pw.Text(
+              'E',
+              style: pw.TextStyle(
+                color: PdfColors.white,
+                fontSize: 20,
+                fontWeight: pw.FontWeight.bold,
+              ),
+            ),
+          ),
+          pw.SizedBox(width: 12),
+          pw.Expanded(
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  'Laporan Kehadiran',
+                  style: pw.TextStyle(
+                    color: PdfColors.white,
+                    fontSize: 19,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+                pw.SizedBox(height: 3),
+                pw.Text(
+                  'IKM Johor Bahru',
+                  style: const pw.TextStyle(
+                    color: PdfColors.grey300,
+                    fontSize: 10,
+                  ),
+                ),
+                pw.SizedBox(height: 7),
+                pw.Text(
+                  _pdfScopeSummary(),
+                  style: const pw.TextStyle(
+                    color: PdfColors.grey200,
+                    fontSize: 8.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          pw.Text(
+            'Dijana\n$dateLabel',
+            textAlign: pw.TextAlign.right,
+            style: const pw.TextStyle(color: PdfColors.grey300, fontSize: 8.5),
+          ),
+        ],
+      ),
+    );
+  }
+
+  pw.Widget _pdfKpiCards(int criticalCount) {
+    final cards = [
+      ['Jumlah Pelajar', '$_totalStudents', PdfColors.blueGrey800],
+      [
+        'Kehadiran Keseluruhan',
+        '${_overallPercent.toStringAsFixed(1)}%',
+        _pdfAttendanceColor(_overallPercent),
+      ],
+      ['Jumlah Tak Hadir', '$_totalAbsences', PdfColors.red700],
+      ['Pelajar Kritikal', '$criticalCount', PdfColors.orange700],
+      ['Kes Amaran Aktif', '$_activeWarnings', PdfColors.amber800],
     ];
-    return parts.join(' | ');
+
+    return pw.Column(
+      children: [
+        pw.Row(
+          children: cards
+              .take(3)
+              .map(
+                (card) => pw.Expanded(
+                  child: _pdfKpiCard(
+                    card[0] as String,
+                    card[1] as String,
+                    card[2] as PdfColor,
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+        pw.SizedBox(height: 8),
+        pw.Row(
+          children: cards
+              .skip(3)
+              .map(
+                (card) => pw.Expanded(
+                  child: _pdfKpiCard(
+                    card[0] as String,
+                    card[1] as String,
+                    card[2] as PdfColor,
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+      ],
+    );
+  }
+
+  pw.Widget _pdfKpiCard(String label, String value, PdfColor color) {
+    return pw.Container(
+      margin: const pw.EdgeInsets.symmetric(horizontal: 3.5),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: pw.BoxDecoration(
+        color: PdfColors.grey50,
+        border: pw.Border.all(color: PdfColors.grey300, width: 0.6),
+        borderRadius: pw.BorderRadius.circular(6),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Container(width: 20, height: 3, color: color),
+          pw.SizedBox(height: 7),
+          pw.Text(
+            value,
+            style: pw.TextStyle(
+              fontSize: 16,
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColors.blueGrey900,
+            ),
+          ),
+          pw.SizedBox(height: 3),
+          pw.Text(
+            label,
+            style: const pw.TextStyle(fontSize: 8.2, color: PdfColors.grey700),
+          ),
+        ],
+      ),
+    );
+  }
+
+  pw.Widget _pdfFilterTags() {
+    return pw.Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: _pdfFilterPairs()
+          .map((pair) => _pdfFilterTag(pair.key, pair.value))
+          .toList(),
+    );
+  }
+
+  pw.Widget _pdfFilterTag(String label, String value) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: pw.BoxDecoration(
+        color: PdfColors.grey100,
+        border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+        borderRadius: pw.BorderRadius.circular(12),
+      ),
+      child: pw.RichText(
+        text: pw.TextSpan(
+          children: [
+            pw.TextSpan(
+              text: '$label: ',
+              style: pw.TextStyle(
+                fontSize: 8.5,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.blueGrey800,
+              ),
+            ),
+            pw.TextSpan(
+              text: value,
+              style: const pw.TextStyle(
+                fontSize: 8.5,
+                color: PdfColors.blueGrey700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  pw.Widget _pdfStatusBlocks(Map<String, int> totals) {
+    final total = totals.values.fold<int>(0, (sum, value) => sum + value);
+    final rows = [
+      ['Hadir', totals['hadir'] ?? 0],
+      ['Tak Hadir', totals['takHadir'] ?? 0],
+      ['MC', totals['mc'] ?? 0],
+      ['CK', totals['ck'] ?? 0],
+    ];
+
+    return pw.Table(
+      border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.4),
+      columnWidths: const {
+        0: pw.FlexColumnWidth(2.0),
+        1: pw.FlexColumnWidth(1.0),
+        2: pw.FlexColumnWidth(1.0),
+      },
+      children: [
+        pw.TableRow(
+          decoration: const pw.BoxDecoration(color: PdfColors.grey100),
+          children: [
+            _pdfStatusCell('Status', isHeader: true),
+            _pdfStatusCell('Jumlah', isHeader: true),
+            _pdfStatusCell('Peratus', isHeader: true),
+          ],
+        ),
+        ...rows.map((row) {
+          final value = row[1] as int;
+          final percent = total == 0 ? 0.0 : (value / total) * 100;
+          return pw.TableRow(
+            children: [
+              _pdfStatusCell(row[0] as String),
+              _pdfStatusCell('$value', align: pw.Alignment.center),
+              _pdfStatusCell(
+                '${percent.toStringAsFixed(1)}%',
+                align: pw.Alignment.center,
+              ),
+            ],
+          );
+        }),
+      ],
+    );
+  }
+
+  pw.Widget _pdfStatusCell(
+    String text, {
+    bool isHeader = false,
+    pw.Alignment align = pw.Alignment.centerLeft,
+  }) {
+    return pw.Container(
+      alignment: align,
+      padding: const pw.EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          fontSize: 8.8,
+          fontWeight: isHeader ? pw.FontWeight.bold : pw.FontWeight.normal,
+          color: PdfColors.blueGrey900,
+        ),
+      ),
+    );
+  }
+
+  pw.Widget _pdfStudentTable(
+    List<AttendanceSummary> students, {
+    bool highlightAttendance = false,
+  }) {
+    return pw.Table(
+      border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.4),
+      columnWidths: const {
+        0: pw.FlexColumnWidth(2.4),
+        1: pw.FlexColumnWidth(1.25),
+        2: pw.FlexColumnWidth(1.0),
+        3: pw.FlexColumnWidth(1.15),
+        4: pw.FlexColumnWidth(0.8),
+        5: pw.FlexColumnWidth(1.1),
+      },
+      children: [
+        pw.TableRow(
+          decoration: const pw.BoxDecoration(color: PdfColors.blueGrey800),
+          children: [
+            _pdfHeaderCell('Nama'),
+            _pdfHeaderCell('ID Pelajar'),
+            _pdfHeaderCell('Kelas'),
+            _pdfHeaderCell('Kehadiran'),
+            _pdfHeaderCell('Tak Hadir'),
+            _pdfHeaderCell('Risiko'),
+          ],
+        ),
+        ...students.map(
+          (summary) => pw.TableRow(
+            children: [
+              _pdfCell(summary.studentName),
+              _pdfCell(summary.studentId),
+              _pdfCell(summary.classId),
+              highlightAttendance
+                  ? _pdfBadgeCell(summary)
+                  : _pdfCell(
+                      '${summary.attendancePercent.toStringAsFixed(1)}%',
+                      align: pw.Alignment.center,
+                    ),
+              _pdfCell('${summary.totalAbsences}', align: pw.Alignment.center),
+              _pdfCell(_pdfWarningLabel(summary.attendancePercent)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  pw.Widget _pdfHeaderCell(String text) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 7, vertical: 7),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          color: PdfColors.white,
+          fontSize: 8,
+          fontWeight: pw.FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  pw.Widget _pdfCell(String text, {pw.Alignment align = pw.Alignment.centerLeft}) {
+    return pw.Container(
+      alignment: align,
+      padding: const pw.EdgeInsets.symmetric(horizontal: 7, vertical: 6),
+      child: pw.Text(
+        text,
+        style: const pw.TextStyle(fontSize: 7.8, color: PdfColors.blueGrey900),
+      ),
+    );
+  }
+
+  pw.Widget _pdfBadgeCell(AttendanceSummary summary) {
+    final color = _pdfAttendanceColor(summary.attendancePercent);
+    return pw.Container(
+      alignment: pw.Alignment.centerLeft,
+      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      child: pw.Container(
+        padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+        decoration: pw.BoxDecoration(
+          color: color,
+          borderRadius: pw.BorderRadius.circular(10),
+        ),
+        child: pw.Text(
+          '${summary.attendancePercent.toStringAsFixed(1)}%',
+          style: pw.TextStyle(
+            color: PdfColors.white,
+            fontSize: 7.8,
+            fontWeight: pw.FontWeight.bold,
+          ),
+        ),
+      ),
+    );
+  }
+
+  pw.Widget _pdfEmptyState(String text) {
+    return pw.Container(
+      width: double.infinity,
+      padding: const pw.EdgeInsets.all(12),
+      decoration: pw.BoxDecoration(
+        color: PdfColors.grey100,
+        borderRadius: pw.BorderRadius.circular(6),
+      ),
+      child: pw.Text(
+        text,
+        style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+      ),
+    );
+  }
+
+  pw.Widget _pdfFooter(pw.Context context) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.only(top: 8),
+      decoration: const pw.BoxDecoration(
+        border: pw.Border(top: pw.BorderSide(color: PdfColors.grey300)),
+      ),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(
+            'Laporan dijana oleh sistem E-ducator',
+            style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+          ),
+          pw.Text(
+            'Halaman ${context.pageNumber} / ${context.pagesCount}',
+            style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+          ),
+        ],
+      ),
+    );
+  }
+
+  PdfColor _pdfAttendanceColor(double percent) {
+    if (percent <= 80) return PdfColors.red700;
+    if (percent <= 90) return PdfColors.orange700;
+    if (percent <= 95) return PdfColors.amber700;
+    return PdfColors.green700;
+  }
+
+  String _pdfWarningLabel(double percent) {
+    if (percent <= 80) return 'Amaran 3';
+    if (percent <= 90) return 'Amaran 2';
+    if (percent <= 95) return 'Amaran 1';
+    return 'Selamat';
+  }
+
+  String _pdfScopeSummary() {
+    return 'Sesi ${_selectedSession ?? "Semua"} / '
+        'Subjek ${_selectedSubjectLabel ?? "Semua"} / '
+        'Seksyen ${_selectedSection ?? "Semua"}';
+  }
+
+  List<MapEntry<String, String>> _pdfFilterPairs() {
+    return [
+      MapEntry('Sesi', _selectedSession ?? 'Semua'),
+      MapEntry('Subjek', _selectedSubjectLabel ?? 'Semua'),
+      MapEntry('Seksyen', _selectedSection ?? 'Semua'),
+      MapEntry('Tarikh Dari', _dateLabel(_dateFrom, fallback: 'Semua')),
+      MapEntry('Tarikh Hingga', _dateLabel(_dateTo, fallback: 'Semua')),
+    ];
   }
 
   DateTime _dateOnly(DateTime date) {
