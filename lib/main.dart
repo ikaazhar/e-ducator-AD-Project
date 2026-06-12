@@ -15,6 +15,7 @@ import 'screens/admin_screen.dart';
 import 'screens/attendance_screen.dart';
 import 'screens/discipline_form_screen.dart';
 import 'screens/discipline_list_screen.dart';
+import 'screens/forgot_password_screen.dart';
 import 'screens/hierarchy_router.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
@@ -54,6 +55,7 @@ class EducatorApp extends StatelessWidget {
           '/': (_) => const HierarchyRouter(),
           '/login': (_) => const LoginScreen(),
           '/register': (_) => const RegisterScreen(),
+          '/forgot-password': (_) => const ForgotPasswordScreen(),
           '/admin': (_) => const AdminScreen(),
           '/admin-booking-monitor': (_) => const AdminBookingMonitorScreen(),
           '/admin-rooms': (_) => const AdminRoomScreen(),
