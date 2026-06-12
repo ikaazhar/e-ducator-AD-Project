@@ -22,6 +22,14 @@ class AccountPendingException implements Exception {
   String toString() => message;
 }
 
+/// Ralat semasa proses set semula kata laluan.
+class PasswordResetException implements Exception {
+  final String message;
+  PasswordResetException(this.message);
+  @override
+  String toString() => message;
+}
+
 class AuthService {
   SupabaseClient get _client => Supabase.instance.client;
 
@@ -133,6 +141,64 @@ class AuthService {
   Future<void> signOut() async {
     if (SupabaseConfig.isPlaceholder) return;
     await _client.auth.signOut();
+  }
+
+  /// Hantar kod pengesahan ke e-mel pengguna untuk set semula kata laluan.
+  Future<void> sendPasswordResetCode(String email) async {
+    if (SupabaseConfig.isPlaceholder) return;
+    try {
+      await _client.auth.resetPasswordForEmail(email);
+    } on AuthException catch (e) {
+      throw PasswordResetException(_mapResetError(e));
+    }
+  }
+
+  /// Sahkan kod OTP, tetapkan kata laluan baru, kemudian log keluar.
+  Future<void> verifyResetCodeAndUpdatePassword({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    if (SupabaseConfig.isPlaceholder) return;
+    try {
+      await _client.auth.verifyOTP(
+        type: OtpType.recovery,
+        email: email,
+        token: code,
+      );
+      await _client.auth.updateUser(UserAttributes(password: newPassword));
+    } on AuthException catch (e) {
+      throw PasswordResetException(_mapResetError(e));
+    } finally {
+      // Buang sesi pemulihan walau apa pun berlaku supaya pengguna
+      // log masuk semula dengan kata laluan baru.
+      if (_client.auth.currentSession != null) {
+        await _client.auth.signOut();
+      }
+    }
+  }
+
+  String _mapResetError(AuthException e) {
+    final code = e.code ?? '';
+    final msg = e.message.toLowerCase();
+    if (code == 'otp_expired' || msg.contains('expired')) {
+      return 'Kod telah tamat tempoh atau tidak sah. Sila minta kod baru.';
+    }
+    if (code == 'over_email_send_rate_limit' ||
+        e.statusCode == '429' ||
+        msg.contains('rate limit')) {
+      return 'Terlalu banyak percubaan. Sila tunggu beberapa minit sebelum cuba lagi.';
+    }
+    if (code == 'same_password') {
+      return 'Kata laluan baru mestilah berbeza daripada kata laluan lama.';
+    }
+    if (code == 'weak_password' || msg.contains('password')) {
+      return 'Kata laluan terlalu lemah. Gunakan sekurang-kurangnya 6 aksara.';
+    }
+    if (msg.contains('token') || msg.contains('invalid')) {
+      return 'Kod tidak sah. Sila semak semula kod dari e-mel anda.';
+    }
+    return 'Ralat: ${e.message}';
   }
 
   // ─── Mock fallback ───────────────────────────────────────────────────────

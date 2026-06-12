@@ -121,7 +121,15 @@ class _LoginScreenState extends State<LoginScreen> {
                         validator: (v) =>
                             (v == null || v.isEmpty) ? 'Sila masukkan kata laluan' : null,
                       ),
-                      const SizedBox(height: 20),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () =>
+                              Navigator.pushNamed(context, '/forgot-password'),
+                          child: const Text('Lupa kata laluan?'),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
                       ElevatedButton(
                         onPressed: _loading ? null : _submit,
                         child: _loading
