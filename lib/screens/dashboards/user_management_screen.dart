@@ -192,7 +192,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Pengurusan Pengguna'),
+        title: const Text('Pengurusan Pengguna Baru'),
         bottom: TabBar(
           controller: _tabController,
           tabs: [

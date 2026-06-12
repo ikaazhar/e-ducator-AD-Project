@@ -154,7 +154,7 @@ class _OverviewDashboardScreenState extends State<OverviewDashboardScreen> {
         Stack(
           children: [
             IconButton(
-              tooltip: 'Pengurusan Pengguna',
+              tooltip: 'Sahkan Pengguna Baru',
               icon: const Icon(Icons.manage_accounts),
               onPressed: _openUserManagement,
             ),
@@ -266,7 +266,7 @@ class _OverviewDashboardScreenState extends State<OverviewDashboardScreen> {
                                     OutlinedButton.icon(
                                       onPressed: _openUserManagement,
                                       icon: const Icon(Icons.manage_accounts, size: 18, color: AppTheme.teal),
-                                      label: const Text('Urus Pengguna'),
+                                      label: const Text('Sahkan Pengguna Baru'),
                                       style: OutlinedButton.styleFrom(
                                         foregroundColor: AppTheme.navy,
                                         side: const BorderSide(color: AppTheme.slateBorder),

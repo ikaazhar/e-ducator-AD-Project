@@ -117,7 +117,7 @@ class _AdminScreenState extends State<AdminScreen> {
         Stack(
           children: [
             IconButton(
-              tooltip: 'Pengurusan Pengguna',
+              tooltip: 'Sahkan Pengguna Baru',
               icon: const Icon(Icons.manage_accounts),
               onPressed: _openUserManagement,
             ),

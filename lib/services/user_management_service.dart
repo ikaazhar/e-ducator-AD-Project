@@ -10,13 +10,14 @@ class UserManagementService {
     switch (approverRole) {
       case 'Admin':
         return [
+          'Admin',
           'Timbalan Pengarah Akademik',
           'Ketua Jabatan',
           'Ketua Program',
           'Lecturer',
         ];
       case 'Timbalan Pengarah Akademik':
-        return ['Ketua Jabatan', 'Ketua Program', 'Lecturer'];
+        return ['Timbalan Pengarah Akademik','Ketua Jabatan', 'Ketua Program', 'Lecturer'];
       case 'Ketua Jabatan':
         return ['Ketua Program', 'Lecturer'];
       case 'Ketua Program':

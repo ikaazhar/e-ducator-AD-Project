@@ -8,6 +8,10 @@ import '../../theme/app_theme.dart';
 import '../../widgets/app_scaffold.dart';
 import '_dashboard_shell.dart';
 
+// Add these imports at the top:
+import '../../services/user_management_service.dart'; // NEW
+import 'user_management_screen.dart'; // NEW
+
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
 
@@ -21,12 +25,32 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   int _totalRooms = 0;
   int _totalStudents = 0;
   int _totalTimetableEntries = 0;
+  // Add to state class:
+  int _pendingCount = 0; // NEW
   List<Map<String, dynamic>> _recentActivity = [];
 
   @override
   void initState() {
     super.initState();
     _loadDashboard();
+    // Add to initState():
+    _loadPendingCount(); // NEW
+  }
+
+  // Add these methods:
+  Future<void> _loadPendingCount() async {
+    try {
+      final rows = await UserManagementService().getPendingUsers('Ketua Program');
+      if (mounted) setState(() => _pendingCount = rows.length);
+    } catch (_) {}
+  }
+
+  void _openUserManagement() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const UserManagementScreen()),
+    );
+    _loadPendingCount();
   }
 
   Future<void> _loadDashboard() async {
@@ -135,6 +159,24 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             foregroundColor: AppTheme.navy,
             side: const BorderSide(color: AppTheme.slateBorder),
           ),
+        ),
+        Stack(
+          children: [
+            IconButton(
+              tooltip: 'Sahkan Pengguna Baru',
+              icon: const Icon(Icons.manage_accounts),
+              onPressed: _openUserManagement,
+            ),
+            if (_pendingCount > 0)
+              Positioned(
+                right: 6, top: 6,
+                child: Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                  child: Text('$_pendingCount', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                ),
+              ),
+          ],
         ),
         const SizedBox(width: 8),
         ElevatedButton.icon(
@@ -573,6 +615,34 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                 side: const BorderSide(color: AppTheme.slateBorder),
                                 alignment: Alignment.centerLeft,
                               ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            height: 44,
+                            child: Stack(
+                              children: [
+                                OutlinedButton.icon(
+                                  onPressed: _openUserManagement,
+                                  icon: const Icon(Icons.manage_accounts, size: 18, color: Color.fromARGB(255, 10, 217, 76)),
+                                  label: const Text('Sahkan Pengguna Baru'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppTheme.navy,
+                                    side: const BorderSide(color: AppTheme.slateBorder),
+                                    alignment: Alignment.centerLeft,
+                                    minimumSize: const Size(double.infinity, 44),
+                                  ),
+                                ),
+                                if (_pendingCount > 0)
+                                  Positioned(
+                                    right: 12, top: 10,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(10)),
+                                      child: Text('$_pendingCount', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
                           const SizedBox(height: 8),
