@@ -22,6 +22,9 @@ class _UserManagementScreenState extends State<UserManagementScreen>
   bool _loading = true;
   String? _error;
 
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _searchQuery = '';
+
   @override
   void initState() {
     super.initState();
@@ -32,8 +35,29 @@ class _UserManagementScreenState extends State<UserManagementScreen>
   @override
   void dispose() {
     _tabController.dispose();
+    _searchCtrl.dispose(); // NEW
     super.dispose();
   }
+
+  List<ApprovalRequest> get _filteredPending {
+    if (_searchQuery.isEmpty) return _pending;
+    final q = _searchQuery.toLowerCase();
+    return _pending.where((r) =>
+        r.fullName.toLowerCase().contains(q) ||
+        r.email.toLowerCase().contains(q) ||
+        r.requestedRole.toLowerCase().contains(q)
+    ).toList();
+  }
+
+  List<UserProfile> get _filteredActive {
+    if (_searchQuery.isEmpty) return _active;
+    final q = _searchQuery.toLowerCase();
+    return _active.where((u) =>
+        u.fullName.toLowerCase().contains(q) ||
+        u.email.toLowerCase().contains(q) ||
+        u.role.toLowerCase().contains(q)
+    ).toList();
+  } 
 
   Future<void> _loadData() async {
     setState(() { _loading = true; _error = null; });
@@ -255,26 +279,63 @@ class _UserManagementScreenState extends State<UserManagementScreen>
   // ─── Pending Tab ─────────────────────────────────────────────────────────
 
   Widget _buildPendingTab() {
-    if (_pending.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.check_circle_outline, size: 56, color: Colors.green),
-            SizedBox(height: 12),
-            Text('Tiada permohonan menunggu kelulusan.'),
-          ],
+    return Column(
+      children: [
+        _searchBar(), // NEW
+        Expanded(
+          child: _pending.isEmpty
+              ? const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.check_circle_outline, size: 56, color: Colors.green),
+                      SizedBox(height: 12),
+                      Text('Tiada permohonan menunggu kelulusan.'),
+                    ],
+                  ),
+                )
+              : _filteredPending.isEmpty // NEW
+                  ? const Center(child: Text('Tiada hasil carian.'))
+                  : RefreshIndicator(
+                      onRefresh: _loadData,
+                      child: ListView.separated(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _filteredPending.length, // CHANGED
+                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        itemBuilder: (_, i) => _pendingCard(_filteredPending[i]), // CHANGED
+                      ),
+                    ),
         ),
-      );
-    }
+      ],
+    );
+  }
 
-    return RefreshIndicator(
-      onRefresh: _loadData,
-      child: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: _pending.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 10),
-        itemBuilder: (_, i) => _pendingCard(_pending[i]),
+  Widget _searchBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: TextField(
+        controller: _searchCtrl,
+        onChanged: (v) => setState(() => _searchQuery = v),
+        decoration: InputDecoration(
+          hintText: 'Cari nama, e-mel atau peranan...',
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear),
+                  onPressed: () {
+                    _searchCtrl.clear();
+                    setState(() => _searchQuery = '');
+                  },
+                )
+              : null,
+          filled: true,
+          fillColor: Colors.grey.shade100,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+        ),
       ),
     );
   }
@@ -358,18 +419,25 @@ class _UserManagementScreenState extends State<UserManagementScreen>
   // ─── Active Tab ──────────────────────────────────────────────────────────
 
   Widget _buildActiveTab() {
-    if (_active.isEmpty) {
-      return const Center(child: Text('Tiada pengguna aktif.'));
-    }
-
-    return RefreshIndicator(
-      onRefresh: _loadData,
-      child: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: _active.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 10),
-        itemBuilder: (_, i) => _activeCard(_active[i]),
-      ),
+    return Column(
+      children: [
+        _searchBar(), // NEW
+        Expanded(
+          child: _active.isEmpty
+              ? const Center(child: Text('Tiada pengguna aktif.'))
+              : _filteredActive.isEmpty // NEW
+                  ? const Center(child: Text('Tiada hasil carian.'))
+                  : RefreshIndicator(
+                      onRefresh: _loadData,
+                      child: ListView.separated(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _filteredActive.length, // CHANGED
+                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        itemBuilder: (_, i) => _activeCard(_filteredActive[i]), // CHANGED
+                      ),
+                    ),
+        ),
+      ],
     );
   }
 
