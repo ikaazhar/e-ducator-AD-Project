@@ -206,7 +206,12 @@ class _AdminScreenState extends State<AdminScreen> {
       cells: [
         DataCell(Text(u.fullName)),
         DataCell(Text(u.email)),
-        DataCell(Text(u.role)),
+        // CHANGED: show requested_role while pending, role once decided
+        DataCell(Text(
+          u.approvalStatus == 'pending' && u.requestedRole != null
+              ? u.requestedRole!
+              : u.role,
+        )),
         DataCell(Text(u.departmentUnit ?? '-')),
 
         // NEW: approval status chip
