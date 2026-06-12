@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/booking.dart';
 import '../models/room.dart';
@@ -141,6 +142,11 @@ class _RoomBookingScreenState extends State<RoomBookingScreen> {
 
       if (!mounted) return;
       final user = context.read<UserProvider>().profile!;
+      final authUid = Supabase.instance.client.auth.currentUser?.id;
+
+      debugPrint('profile.id = ${user.id}');
+      debugPrint('auth.uid()  = $authUid');
+
       await _service.createBooking(Booking(
         roomId: _room!.id,
         userId: user.id,

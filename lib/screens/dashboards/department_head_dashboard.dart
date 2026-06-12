@@ -11,6 +11,8 @@ import '../../services/reporting_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_scaffold.dart';
 import '_dashboard_shell.dart';
+import '../../services/user_management_service.dart'; // NEW
+import 'user_management_screen.dart';
 
 class DepartmentHeadDashboardScreen extends StatefulWidget {
   const DepartmentHeadDashboardScreen({super.key});
@@ -27,12 +29,30 @@ class _DepartmentHeadDashboardScreenState
   int _level3Count = 0;
   int _totalPrograms = 0;
   int _totalLecturers = 0;
+  // Add to state class:
+  int _pendingCount = 0; // NEW 
   List<Map<String, dynamic>> _escalatedCases = [];
 
   @override
   void initState() {
     super.initState();
     _loadDashboard();
+    _loadPendingCount(); // NEW
+  }
+
+  Future<void> _loadPendingCount() async {
+    try {
+      final rows = await UserManagementService().getPendingUsers('Ketua Jabatan');
+      if (mounted) setState(() => _pendingCount = rows.length);
+    } catch (_) {}
+  }
+
+  void _openUserManagement() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const UserManagementScreen()),
+    );
+    _loadPendingCount();
   }
 
   Future<void> _loadDashboard() async {
@@ -143,15 +163,32 @@ class _DepartmentHeadDashboardScreenState
     return AppScaffold(
       title: 'Papan Pemuka',
       actions: [
-        ElevatedButton.icon(
-          onPressed: () => Navigator.pushNamed(context, '/reporting'),
-          icon: const Icon(Icons.bar_chart, size: 16),
-          label: const Text('Laporan Penuh'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppTheme.navy,
-            foregroundColor: Colors.white,
+         Stack(
+            children: [
+              IconButton(
+                tooltip: 'Sahkan Pengguna Baru',
+                icon: const Icon(Icons.manage_accounts),
+                onPressed: _openUserManagement,
+              ),
+              if (_pendingCount > 0)
+                Positioned(
+                  right: 6,
+                  top: 6,
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                    child: Text('$_pendingCount', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+            ],
           ),
-        ),
+          const SizedBox(width: 4),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pushNamed(context, '/reporting'),
+            icon: const Icon(Icons.bar_chart, size: 16),
+            label: const Text('Laporan Penuh'),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.navy, foregroundColor: Colors.white),
+          ),
       ],
       body: _loading
           ? const Center(
@@ -437,6 +474,34 @@ class _DepartmentHeadDashboardScreenState
                                             route: '/booking',
                                             color: AppTheme.teal,
                                           ),
+                                          const SizedBox(height: 8),
+                                            SizedBox(
+                                              height: 44,
+                                              child: Stack(
+                                                children: [
+                                                  OutlinedButton.icon(
+                                                    onPressed: _openUserManagement,
+                                                    icon: const Icon(Icons.manage_accounts, size: 18, color: AppTheme.teal),
+                                                    label: const Text('Sahkan Pengguna Baru'),
+                                                    style: OutlinedButton.styleFrom(
+                                                      foregroundColor: AppTheme.navy,
+                                                      side: const BorderSide(color: AppTheme.slateBorder),
+                                                      alignment: Alignment.centerLeft,
+                                                      minimumSize: const Size(double.infinity, 44),
+                                                    ),
+                                                  ),
+                                                  if (_pendingCount > 0)
+                                                    Positioned(
+                                                      right: 12, top: 10,
+                                                      child: Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                        decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(10)),
+                                                        child: Text('$_pendingCount', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                                                      ),
+                                                    ),
+                                                ],
+                                              ),
+                                            ),
                                         ],
                                       ),
                                     ),
@@ -599,6 +664,34 @@ class _DepartmentHeadDashboardScreenState
                                           route: '/booking',
                                           color: AppTheme.teal,
                                         ),
+                                        const SizedBox(height: 8),
+                                        SizedBox(
+                                          height: 44,
+                                          child: Stack(
+                                            children: [
+                                              OutlinedButton.icon(
+                                                onPressed: _openUserManagement,
+                                                icon: const Icon(Icons.manage_accounts, size: 18, color: AppTheme.teal),
+                                                label: const Text('Sahkan Pengguna Baru'),
+                                                style: OutlinedButton.styleFrom(
+                                                  foregroundColor: AppTheme.navy,
+                                                  side: const BorderSide(color: AppTheme.slateBorder),
+                                                  alignment: Alignment.centerLeft,
+                                                  minimumSize: const Size(double.infinity, 44),
+                                                ),
+                                              ),
+                                            if (_pendingCount > 0)
+                                              Positioned(
+                                                right: 12, top: 10,
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(10)),
+                                                  child: Text('$_pendingCount', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
                                       ],
                                     ),
                                   ),
