@@ -71,21 +71,15 @@ class TimetableCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(color: borderColor, width: borderWidth),
       ),
-<<<<<<< Updated upstream
-=======
       color: isOngoing
-          ? AppTheme.teal.withOpacity(0.04)
+          ? AppTheme.teal.withValues(alpha: 0.04)
           : Colors.white,
->>>>>>> Stashed changes
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-<<<<<<< Updated upstream
-=======
             // ── Pengepala: nama subjek + lencana status ──
->>>>>>> Stashed changes
             Row(
               children: [
                 Expanded(
@@ -115,12 +109,6 @@ class TimetableCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-<<<<<<< Updated upstream
-            _infoRow(Icons.calendar_today, entry.day),
-            _infoRow(Icons.access_time, entry.timeSlot),
-            _infoRow(Icons.meeting_room, entry.roomName ?? '-'),
-            const SizedBox(height: 16),
-=======
             const Divider(height: 1),
             const SizedBox(height: 10),
 
@@ -142,7 +130,6 @@ class TimetableCard extends StatelessWidget {
             const SizedBox(height: 14),
 
             // ── Butang tindakan ──
->>>>>>> Stashed changes
             SizedBox(
               width: double.infinity,
               child: isSubmitted
@@ -171,11 +158,6 @@ class TimetableCard extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 4),
       child: Row(
         children: [
-<<<<<<< Updated upstream
-          Icon(icon, size: 16, color: AppTheme.textMuted),
-          const SizedBox(width: 8),
-          Text(value, style: const TextStyle(color: AppTheme.textDark)),
-=======
           Icon(
             icon,
             size: 15,
@@ -194,7 +176,6 @@ class TimetableCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
->>>>>>> Stashed changes
         ],
       ),
     );
