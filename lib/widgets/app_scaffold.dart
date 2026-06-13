@@ -390,6 +390,7 @@ class _NotificationBell extends StatefulWidget {
 class _NotificationBellState extends State<_NotificationBell> {
   List<Map<String, dynamic>> _notifications = [];
   int _unreadCount = 0;
+  final _reportingService = ReportingService();
 
   @override
   void initState() {
@@ -399,6 +400,7 @@ class _NotificationBellState extends State<_NotificationBell> {
 
   Future<void> _loadNotifications() async {
     if (widget.user == null) {
+      if (!mounted) return;
       setState(() {
         _notifications = [];
         _computeUnread();
@@ -406,7 +408,8 @@ class _NotificationBellState extends State<_NotificationBell> {
       return;
     }
 
-    final notifications = await ReportingService().fetchWarningNotifications(widget.user!);
+    final notifications =
+        await _reportingService.fetchWarningNotifications(widget.user!);
     if (!mounted) return;
     setState(() {
       _notifications = notifications;
@@ -414,9 +417,15 @@ class _NotificationBellState extends State<_NotificationBell> {
     });
   }
 
+  Future<List<Map<String, dynamic>>> _fetchNotifications() async {
+    if (widget.user == null) return [];
+    return _reportingService.fetchWarningNotifications(widget.user!);
+  }
+
   void _computeUnread() {
-  _unreadCount = _notifications.where((item) => !_isRead(item['is_read'])).length;
-}
+    _unreadCount =
+        _notifications.where((item) => !_isRead(item['is_read'])).length;
+  }
 
   Future<void> _openNotificationPanel(BuildContext context) async {
     await showGeneralDialog(
@@ -456,8 +465,10 @@ class _NotificationBellState extends State<_NotificationBell> {
       final levelB = b['warning_level'] as int? ?? 0;
       final levelCompare = levelB.compareTo(levelA);
       if (levelCompare != 0) return levelCompare;
-      final createdA = DateTime.tryParse(a['created_at']?.toString() ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
-      final createdB = DateTime.tryParse(b['created_at']?.toString() ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final createdA = DateTime.tryParse(a['created_at']?.toString() ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      final createdB = DateTime.tryParse(b['created_at']?.toString() ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0);
       return createdB.compareTo(createdA);
     });
 
@@ -501,7 +512,8 @@ class _NotificationBellState extends State<_NotificationBell> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: const [
-                        Icon(Icons.notifications_none, size: 48, color: AppTheme.textMuted),
+                        Icon(Icons.notifications_none,
+                            size: 48, color: AppTheme.textMuted),
                         SizedBox(height: 8),
                         Text(
                           'Tiada notifikasi amaran.',
@@ -514,17 +526,22 @@ class _NotificationBellState extends State<_NotificationBell> {
               : SingleChildScrollView(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: sorted.map((notification) => _buildNotificationRow(notification)).toList(),
+                    children: sorted
+                        .map((notification) =>
+                            _buildNotificationRow(notification))
+                        .toList(),
+                  ),
                 ),
-              ),
         ),
       ],
     );
   }
 
   Widget _buildGroupSection(int level, List<Map<String, dynamic>> items) {
-    final color = level == 3 ? AppTheme.tidakHadir : level == 2 ? AppTheme.ck : AppTheme.mc;
-    final icon = level == 3 ? Icons.error : level == 2 ? Icons.warning : Icons.info_outline;
+    final color =
+        level == 3 ? AppTheme.tidakHadir : level == 2 ? AppTheme.ck : AppTheme.mc;
+    final icon =
+        level == 3 ? Icons.error : level == 2 ? Icons.warning : Icons.info_outline;
     final label = 'Amaran Tahap $level';
 
     return Column(
@@ -557,12 +574,15 @@ class _NotificationBellState extends State<_NotificationBell> {
   Widget _buildNotificationRow(Map<String, dynamic> notification) {
     final isRead = _isRead(notification['is_read']);
     final level = notification['warning_level'] as int? ?? 0;
-    final badgeColor = level == 3 ? AppTheme.tidakHadir : level == 2 ? AppTheme.ck : AppTheme.mc;
+    final badgeColor =
+        level == 3 ? AppTheme.tidakHadir : level == 2 ? AppTheme.ck : AppTheme.mc;
     final createdAt = notification['created_at']?.toString();
     final parsedDate = DateTime.tryParse(createdAt ?? '');
     final formattedDate = parsedDate == null
         ? ''
         : DateFormat('d MMM yyyy', 'ms').format(parsedDate);
+    final message = _notificationMessage(notification);
+    final title = level > 0 ? 'Amaran Tahap $level' : 'Notifikasi Amaran';
 
     return InkWell(
       onTap: () => _onNotificationTap(notification),
@@ -593,17 +613,27 @@ class _NotificationBellState extends State<_NotificationBell> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    notification['message']?.toString() ?? '',
+                    title,
                     style: TextStyle(
                       fontSize: 13,
                       color: isRead ? AppTheme.textMuted : AppTheme.navy,
-                      fontWeight: isRead ? FontWeight.normal : FontWeight.w600,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 3),
                   Text(
+                    message,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isRead ? AppTheme.textMuted : AppTheme.textDark,
+                      height: 1.35,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
                     formattedDate,
-                    style: const TextStyle(color: AppTheme.textMuted, fontSize: 11),
+                    style:
+                        const TextStyle(color: AppTheme.textMuted, fontSize: 11),
                   ),
                 ],
               ),
@@ -626,16 +656,55 @@ class _NotificationBellState extends State<_NotificationBell> {
 
   Future<void> _onNotificationTap(Map<String, dynamic> notification) async {
     final id = notification['id'];
-    if (id != null) {
+    if (mounted) {
       final index = _notifications.indexWhere((item) => item['id'] == id);
       if (index != -1) {
         setState(() {
-          _notifications[index]['is_read'] = true;
+          _notifications[index] = {..._notifications[index], 'is_read': true};
+          notification['is_read'] = true;
           _computeUnread();
         });
-        await Supabase.instance.client.from('notifications').update({'is_read': true}).eq('id', id);
       }
+    } else {
+      notification['is_read'] = true;
     }
+
+    var persistedRead = true;
+    try {
+      if (id != null) {
+        await _reportingService.markNotificationRead(id);
+        final latest = await _fetchNotifications();
+        persistedRead = _isNotificationReadIn(latest, id);
+        if (mounted) {
+          setState(() {
+            _notifications = latest;
+            _computeUnread();
+          });
+        }
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Gagal menandakan semua notifikasi sebagai dibaca.'),
+          backgroundColor: AppTheme.tidakHadir,
+        ),
+      );
+      return;
+    }
+
+    if (!persistedRead) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Notifikasi masih belum ditandakan dibaca di Supabase. Semak policy/update table.',
+          ),
+          backgroundColor: AppTheme.tidakHadir,
+        ),
+      );
+    }
+
     if (!mounted) return;
     Navigator.of(context).pop();
     _showWarningLetterFromNotification(context, notification);
@@ -643,16 +712,44 @@ class _NotificationBellState extends State<_NotificationBell> {
 
   Future<void> _markAllRead() async {
     if (widget.user == null) return;
-    setState(() {
-      _notifications = _notifications
-          .map((item) => {...item, 'is_read': true})
-          .toList();
-      _computeUnread();
-    });
-    await Supabase.instance.client
-        .from('notifications')
-        .update({'is_read': true})
-        .eq('recipient_role', widget.user!.role);
+    if (mounted) {
+      setState(() {
+        _notifications = _notifications
+            .map((item) => {...item, 'is_read': true})
+            .toList();
+        _computeUnread();
+      });
+    }
+    try {
+      await _reportingService.markAllNotificationsRead(widget.user!.role);
+      final latest = await _fetchNotifications();
+      final unreadCount = latest.where((item) => !_isRead(item['is_read'])).length;
+      if (mounted) {
+        setState(() {
+          _notifications = latest;
+          _computeUnread();
+        });
+      }
+      if (unreadCount > 0) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Sebahagian notifikasi masih belum ditandakan dibaca di Supabase.',
+            ),
+            backgroundColor: AppTheme.tidakHadir,
+          ),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Gagal menandakan notifikasi sebagai dibaca.'),
+          backgroundColor: AppTheme.tidakHadir,
+        ),
+      );
+    }
   }
 
   void _showWarningLetterFromNotification(
@@ -660,7 +757,9 @@ class _NotificationBellState extends State<_NotificationBell> {
     showDialog(
       context: context,
       builder: (context) {
-        final createdAt = DateTime.tryParse(notification['created_at']?.toString() ?? '') ?? DateTime.now();
+        final createdAt =
+            DateTime.tryParse(notification['created_at']?.toString() ?? '') ??
+                DateTime.now();
         return AlertDialog(
           title: const Text(
             'Surat Amaran Kehadiran',
@@ -682,13 +781,18 @@ class _NotificationBellState extends State<_NotificationBell> {
                   ),
                   const Divider(),
                   const SizedBox(height: 8),
-                  _letterRow('Mesej', notification['message']?.toString() ?? ''),
-                  _letterRow('Tahap Amaran', 'Level ${notification['warning_level'] ?? ''}'),
-                  _letterRow('Tarikh', DateFormat('d MMMM yyyy', 'ms').format(createdAt)),
+                  _letterRow('Mesej', _notificationMessage(notification)),
+                  _letterRow('Tahap Amaran',
+                      'Tahap ${notification['warning_level'] ?? ''}'),
+                  _letterRow('Tarikh',
+                      DateFormat('d MMMM yyyy', 'ms').format(createdAt)),
                   const SizedBox(height: 10),
                   const Text(
                     'Notifikasi ini dijana secara automatik oleh sistem E-ducator berdasarkan rekod kehadiran pelajar.',
-                    style: TextStyle(fontSize: 13, height: 1.6, color: AppTheme.textMuted),
+                    style: TextStyle(
+                        fontSize: 13,
+                        height: 1.6,
+                        color: AppTheme.textMuted),
                   ),
                   const Divider(),
                   const SizedBox(height: 8),
@@ -725,6 +829,26 @@ class _NotificationBellState extends State<_NotificationBell> {
         );
       },
     );
+  }
+
+  bool _isNotificationReadIn(List<Map<String, dynamic>> notifications, dynamic id) {
+    final index = notifications.indexWhere((item) => item['id'] == id);
+    if (index == -1) return false;
+    return _isRead(notifications[index]['is_read']);
+  }
+
+  String _notificationMessage(Map<String, dynamic> notification) {
+    final raw = notification['message']?.toString().trim() ?? '';
+    final level = notification['warning_level'] as int? ?? 0;
+    if (raw.isEmpty) {
+      return 'Sila semak rekod kehadiran pelajar dan ambil tindakan susulan.';
+    }
+
+    final prefix = RegExp(
+      '^Amaran\\s+Tahap\\s+$level\\s*:\\s*',
+      caseSensitive: false,
+    );
+    return raw.replaceFirst(prefix, '');
   }
 
   Padding _letterRow(String label, String value) {

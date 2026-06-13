@@ -19,10 +19,7 @@ class ReportingService {
 
       final grouped = <String, List<String>>{};
       for (final row in (data as List).cast<Map<String, dynamic>>()) {
-        final kelas = row['kelas']?.toString();
-        final label =
-            '${row['subject_code'] ?? ''} - ${row['subject_name'] ?? ''}'
-            '${kelas == null || kelas.isEmpty ? '' : ' ($kelas)'}';
+        final label = '${row['subject_code'] ?? ''}-${row['subject_name'] ?? ''}';
         final id = row['id']?.toString();
         if (id == null || id.isEmpty) continue;
         grouped.putIfAbsent(label, () => []).add(id);
@@ -170,7 +167,11 @@ class ReportingService {
 
         final totalCounted = hadir + takHadir;
         final attendancePercent =
-            totalCounted == 0 ? 0.0 : (hadir / totalCounted) * 100;
+            totalCounted == 0 ? 100.0 : (hadir / totalCounted) * 100;
+        final warningLevel =
+            totalCounted == 0 ? 0 : _warningLevel(attendancePercent);
+        final riskStatus =
+            totalCounted == 0 ? 'Selamat' : _riskStatus(attendancePercent);
 
         final studentIdValue =
             student['student_id']?.toString() ?? student['id']?.toString() ?? '';
@@ -185,8 +186,9 @@ class ReportingService {
             classId: classId,
             attendancePercent: attendancePercent,
             totalAbsences: takHadir,
-            warningLevel: _warningLevel(attendancePercent),
-            riskStatus: _riskStatus(attendancePercent),
+            countedRecords: totalCounted,
+            warningLevel: warningLevel,
+            riskStatus: riskStatus,
           ),
         );
       }
@@ -216,6 +218,7 @@ class ReportingService {
     try {
       final payload = <Map<String, dynamic>>[];
       for (final summary in summaries) {
+        if (summary.countedRecords == 0) continue;
         if (summary.warningLevel == 0) continue;
         final recipients = _recipientsForLevel(summary.warningLevel);
         for (final role in recipients) {
@@ -225,7 +228,7 @@ class ReportingService {
             'warning_level': summary.warningLevel,
             'is_read': false,
             'message':
-                'Pelajar ${summary.studentName} mencatatkan kehadiran ${summary.attendancePercent.toStringAsFixed(1)}%',
+                'Kehadiran ${summary.studentName} ialah ${summary.attendancePercent.toStringAsFixed(1)}%. Sila semak dan ambil tindakan susulan.',
           });
         }
       }
@@ -235,6 +238,18 @@ class ReportingService {
     } catch (_) {
       // Do nothing on error.
     }
+  }
+
+  Future<void> markNotificationRead(dynamic id) async {
+    if (id == null) return;
+    await _client.from('notifications').update({'is_read': true}).eq('id', id);
+  }
+
+  Future<void> markAllNotificationsRead(String role) async {
+    await _client
+        .from('notifications')
+        .update({'is_read': true})
+        .eq('recipient_role', role);
   }
 
   Future<List<Map<String, dynamic>>> fetchRawSessionTrend(
