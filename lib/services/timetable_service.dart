@@ -1,22 +1,24 @@
 // lib/services/timetable_service.dart
-//
-// Perkhidmatan untuk modul jadual waktu (M4 + M5).
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/supabase_config.dart';
 import '../models/timetable_entry.dart';
+import '../models/user_profile.dart';
 
 class TimetableService {
   SupabaseClient get _client => Supabase.instance.client;
 
-  /// Ambil jadual waktu untuk seorang pensyarah, termasuk nama bilik.
+  // ─── FETCH ───────────────────────────────────────────────
+
   Future<List<TimetableEntry>> fetchLecturerTimetable(String lecturerId) async {
     if (SupabaseConfig.isPlaceholder) return _mockEntries();
     try {
       final data = await _client
           .from('timetable')
-          .select('*, rooms(room_name)')
-          .eq('lecturer_id', lecturerId);
+          .select('*, profiles!lecturer_id(full_name), rooms(room_name)')
+          .eq('lecturer_id', lecturerId)
+          .order('day')
+          .order('start_time');
       return (data as List)
           .map((row) => TimetableEntry.fromJson(row as Map<String, dynamic>))
           .toList();
@@ -25,15 +27,18 @@ class TimetableService {
     }
   }
 
-  /// Ambil semua entri jadual (untuk Admin / Ketua Program). Tapis ikut unit jika perlu.
-  Future<List<TimetableEntry>> fetchAllTimetable({String? departmentUnit}) async {
+  Future<List<TimetableEntry>> fetchAllTimetable({
+    String? departmentUnit,
+  }) async {
     if (SupabaseConfig.isPlaceholder) return _mockEntries();
     try {
-      var query = _client.from('timetable').select('*, rooms(room_name)');
+      var query = _client
+          .from('timetable')
+          .select('*, profiles!lecturer_id(full_name), rooms(room_name)');
       if (departmentUnit != null) {
         query = query.eq('department_unit', departmentUnit);
       }
-      final data = await query;
+      final data = await query.order('day').order('start_time');
       return (data as List)
           .map((row) => TimetableEntry.fromJson(row as Map<String, dynamic>))
           .toList();
@@ -42,7 +47,109 @@ class TimetableService {
     }
   }
 
-  /// Periksa sama ada sesi telah dihantar oleh pensyarah pada tarikh tertentu.
+  /// Ambil senarai pensyarah dari profiles mengikut unit jabatan.
+  Future<List<UserProfile>> fetchLecturersByUnit(String departmentUnit) async {
+    if (SupabaseConfig.isPlaceholder) {
+      return [
+        UserProfile(
+          id: 'mock-user-id',
+          fullName: 'Pengguna Demo',
+          email: 'lecturer@ikmjb.edu.my',
+          role: 'Lecturer',
+          departmentUnit: departmentUnit,
+        ),
+      ];
+    }
+    try {
+      final data = await _client
+          .from('profiles')
+          .select('id, full_name, email, role, department_unit')
+          .eq('role', 'Lecturer')
+          .eq('department_unit', departmentUnit)
+          .order('full_name');
+      return (data as List)
+          .map((r) => UserProfile.fromJson(r as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Ambil senarai kelas (kelas) yang unik dari jadual students
+  /// mengikut program_id — digunakan untuk dropdown kelas dalam borang M4.
+  Future<List<String>> fetchKelasByUnit(String departmentUnit) async {
+    if (SupabaseConfig.isPlaceholder) {
+      return ['${departmentUnit}4A', '${departmentUnit}4B'];
+    }
+    try {
+      final data = await _client
+          .from('students')
+          .select('kelas')
+          .eq('program_id', departmentUnit)
+          .order('kelas');
+      final all = (data as List)
+          .map((r) => r['kelas'] as String?)
+          .whereType<String>()
+          .toSet()
+          .toList();
+      all.sort();
+      return all;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  // ─── CONFLICT CHECK ──────────────────────────────────────
+
+  Future<bool> isRoomSlotFree({
+    required int roomId,
+    required String day,
+    required String startTime,
+    required String endTime,
+    String? excludeId,
+  }) async {
+    if (SupabaseConfig.isPlaceholder) return true;
+    try {
+      var query = _client
+          .from('timetable')
+          .select('id')
+          .eq('room_id', roomId)
+          .eq('day', day)
+          .lt('start_time', endTime)
+          .gt('end_time', startTime);
+      if (excludeId != null) {
+        query = query.neq('id', excludeId);
+      }
+      final conflicts = await query;
+      return (conflicts as List).isEmpty;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  // ─── INSERT / UPDATE / DELETE ────────────────────────────
+
+  Future<void> insertTimetable(
+    TimetableEntry entry, {
+    required String createdBy,
+  }) async {
+    if (SupabaseConfig.isPlaceholder) return;
+    final payload = entry.toJson()..['created_by'] = createdBy;
+    await _client.from('timetable').insert(payload);
+  }
+
+  Future<void> updateTimetable(String id, TimetableEntry entry) async {
+    if (SupabaseConfig.isPlaceholder) return;
+    await _client.from('timetable').update(entry.toJson()).eq('id', id);
+  }
+
+  Future<void> deleteTimetable(String id) async {
+    if (SupabaseConfig.isPlaceholder) return;
+    await _client.from('timetable').delete().eq('id', id);
+  }
+
+  // ─── ATTENDANCE INTEGRATION ──────────────────────────────
+
   Future<bool> checkSessionSubmitted({
     required String timetableId,
     required String attendanceDate,
@@ -51,7 +158,7 @@ class TimetableService {
     try {
       final result = await _client
           .from('attendance_records')
-          .select()
+          .select('id')
           .eq('timetable_id', timetableId)
           .eq('attendance_date', attendanceDate);
       return (result as List).isNotEmpty;
@@ -60,90 +167,119 @@ class TimetableService {
     }
   }
 
-  /// Periksa konflik bilik sebelum memasukkan slot baru.
-  /// Mengembalikan `true` jika tiada konflik.
-  Future<bool> isRoomSlotFree({
-    required int roomId,
-    required String day,
-    required String startTime,
-    required String endTime,
-  }) async {
-    if (SupabaseConfig.isPlaceholder) return true;
+  // ─── STATS ───────────────────────────────────────────────
+
+  Future<TimetableStats> fetchStats({String? departmentUnit}) async {
+    if (SupabaseConfig.isPlaceholder) {
+      return const TimetableStats(
+        totalClasses: 3,
+        roomsInUse: 3,
+        lecturersScheduled: 1,
+        classesToday: 1,
+      );
+    }
     try {
-      final conflicts = await _client
-          .from('timetable')
-          .select()
-          .eq('room_id', roomId)
-          .eq('day', day)
-          .lt('start_time', endTime)
-          .gt('end_time', startTime);
-      return (conflicts as List).isEmpty;
+      var query = _client.from('timetable').select('id, room_id, lecturer_id, day');
+      if (departmentUnit != null) {
+        query = query.eq('department_unit', departmentUnit);
+      }
+      final data = await query;
+      final list = data as List;
+      final today = _todayMalay();
+      final todayList = list.where((e) => e['day'] == today).toList();
+      final rooms = list.map((e) => e['room_id']).toSet();
+      final lecturers = list.map((e) => e['lecturer_id']).toSet();
+      return TimetableStats(
+        totalClasses: list.length,
+        roomsInUse: rooms.length,
+        lecturersScheduled: lecturers.length,
+        classesToday: todayList.length,
+      );
     } catch (_) {
-      return true;
+      return const TimetableStats(
+        totalClasses: 0,
+        roomsInUse: 0,
+        lecturersScheduled: 0,
+        classesToday: 0,
+      );
     }
   }
 
-  /// Masukkan entri jadual baru.
-  Future<void> insertTimetable(TimetableEntry entry, {required String createdBy}) async {
-    if (SupabaseConfig.isPlaceholder) return;
-    final payload = entry.toJson()..['created_by'] = createdBy;
-    await _client.from('timetable').insert(payload);
+  String _todayMalay() {
+    const map = {
+      DateTime.monday: 'Isnin',
+      DateTime.tuesday: 'Selasa',
+      DateTime.wednesday: 'Rabu',
+      DateTime.thursday: 'Khamis',
+      DateTime.friday: 'Jumaat',
+    };
+    return map[DateTime.now().weekday] ?? '';
   }
 
-  /// Padam entri.
-  Future<void> deleteTimetable(String id) async {
-    if (SupabaseConfig.isPlaceholder) return;
-    await _client.from('timetable').delete().eq('id', id);
-  }
+  // ─── MOCK DATA ───────────────────────────────────────────
 
-  // -------------------- Mock --------------------
   List<TimetableEntry> _mockEntries() {
-    const id1 = '11111111-1111-1111-1111-111111111111';
-    const id2 = '22222222-2222-2222-2222-222222222222';
-    const id3 = '33333333-3333-3333-3333-333333333333';
     return const [
       TimetableEntry(
-        id: id1,
+        id: '11111111-1111-1111-1111-111111111111',
         subjectCode: 'DGS1013',
         subjectName: 'Asas Pengaturcaraan',
         departmentUnit: 'DGS',
         lecturerId: 'mock-user-id',
-        lecturerName: 'Pengguna Demo',
+        lecturerName: 'Pn. Syarifah',
         day: 'Isnin',
         startTime: '08:00:00',
         endTime: '10:00:00',
         roomId: 1,
-        roomName: 'Bilik A1',
-        session: '2025/01',
+        roomName: 'Bilik Kuliah 1',
+        session: 'JAN-JUN 2026',
+        kelas: 'DGS4A',
       ),
       TimetableEntry(
-        id: id2,
+        id: '22222222-2222-2222-2222-222222222222',
         subjectCode: 'DGS2023',
         subjectName: 'Sistem Pangkalan Data',
         departmentUnit: 'DGS',
-        lecturerId: 'mock-user-id',
-        lecturerName: 'Pengguna Demo',
+        lecturerId: 'mock-user-id-2',
+        lecturerName: 'En. Rafidah',
         day: 'Selasa',
         startTime: '10:00:00',
         endTime: '12:00:00',
         roomId: 2,
-        roomName: 'Makmal B2',
-        session: '2025/01',
+        roomName: 'Comp Lab 1',
+        session: 'JAN-JUN 2026',
+        kelas: 'DGS4B',
       ),
       TimetableEntry(
-        id: id3,
-        subjectCode: 'DGS3033',
-        subjectName: 'Pembangunan Aplikasi Mudah Alih',
-        departmentUnit: 'DGS',
-        lecturerId: 'mock-user-id',
-        lecturerName: 'Pengguna Demo',
+        id: '33333333-3333-3333-3333-333333333333',
+        subjectCode: 'DPP1013',
+        subjectName: 'Asas Pemasaran',
+        departmentUnit: 'DPP',
+        lecturerId: 'mock-user-id-3',
+        lecturerName: 'Pn. Norhatini',
         day: 'Rabu',
         startTime: '14:00:00',
         endTime: '16:00:00',
         roomId: 3,
-        roomName: 'Makmal C1',
-        session: '2025/01',
+        roomName: 'Bilik Kuliah 2',
+        session: 'JAN-JUN 2026',
+        kelas: 'DPP4A',
       ),
     ];
   }
+}
+
+// ─── STATS MODEL ─────────────────────────────────────────
+class TimetableStats {
+  final int totalClasses;
+  final int roomsInUse;
+  final int lecturersScheduled;
+  final int classesToday;
+
+  const TimetableStats({
+    required this.totalClasses,
+    required this.roomsInUse,
+    required this.lecturersScheduled,
+    required this.classesToday,
+  });
 }

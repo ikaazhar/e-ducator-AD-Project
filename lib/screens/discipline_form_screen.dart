@@ -1,11 +1,12 @@
 // lib/screens/discipline_form_screen.dart
 //
-// Modul 2 — Halaman 2: Borang Laporan Disiplin.
+// Modul 2 — Halaman 2: Borang Laporan Disiplin (Cipta + Edit).
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/discipline_report.dart';
 import '../models/student.dart';
+import '../models/timetable_entry.dart';
 import '../providers/user_provider.dart';
 import '../services/discipline_service.dart';
 import '../theme/app_theme.dart';
@@ -23,22 +24,45 @@ class _DisciplineFormScreenState extends State<DisciplineFormScreen> {
   final _service = DisciplineService();
   final _notesCtrl = TextEditingController();
 
+  DisciplineReport? _editing;
+  bool get _isEdit => _editing != null;
+
+  List<TimetableEntry> _courses = const [];
   List<Student> _students = const [];
+  TimetableEntry? _selectedCourse;
   Student? _selectedStudent;
   String _issueType = kIssueTypes.first;
   String _severity = 'Rendah';
   bool _loading = true;
   bool _saving = false;
+  bool _initialised = false;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialised) return;
+    _initialised = true;
+    final arg = ModalRoute.of(context)?.settings.arguments;
+    if (arg is DisciplineReport) {
+      _editing = arg;
+      _issueType = kIssueTypes.contains(arg.issueType) ? arg.issueType : kIssueTypes.first;
+      _severity = kSeverityLevels.contains(arg.severity) ? arg.severity : 'Rendah';
+      _notesCtrl.text = arg.notes ?? '';
+    }
     _load();
   }
 
   Future<void> _load() async {
+    if (_isEdit) {
+      // Mod edit (Admin): tiada perlu muat dropdown kursus/pelajar.
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
     final user = context.read<UserProvider>().profile!;
-    _students = await _service.fetchStudents(user.departmentUnit ?? 'DGS');
+    _courses = await _service.fetchLecturerCourses(user.id);
+    final programUnits =
+        _courses.map((c) => c.departmentUnit).toSet().toList();
+    _students = await _service.fetchStudentsForLecturer(programUnits);
     if (mounted) setState(() => _loading = false);
   }
 
@@ -53,31 +77,57 @@ class _DisciplineFormScreenState extends State<DisciplineFormScreen> {
     }
   }
 
+  List<Student> get _studentsForSelectedCourse {
+    if (_selectedCourse == null) return _students;
+    return _students
+        .where((s) => s.programId == _selectedCourse!.departmentUnit)
+        .toList();
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedStudent == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sila pilih pelajar.')),
-      );
-      return;
+    if (!_isEdit) {
+      if (_selectedCourse == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Sila pilih kursus.')),
+        );
+        return;
+      }
+      if (_selectedStudent == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Sila pilih pelajar.')),
+        );
+        return;
+      }
     }
+
     setState(() => _saving = true);
     try {
       final user = context.read<UserProvider>().profile!;
-      await _service.submitReport(
-        DisciplineReport(
-          studentId: _selectedStudent!.id,
+      if (_isEdit) {
+        final updated = _editing!.copyWith(
           issueType: _issueType,
           severity: _severity,
           notes: _notesCtrl.text.trim(),
-          reportedBy: user.id,
-          programId: _selectedStudent!.programId,
-          departmentId: user.departmentUnit,
-        ),
-      );
+        );
+        await _service.updateReport(_editing!.id!, updated);
+      } else {
+        await _service.submitReport(
+          DisciplineReport(
+            studentId: _selectedStudent!.id,
+            issueType: _issueType,
+            severity: _severity,
+            notes: _notesCtrl.text.trim(),
+            reportedBy: user.id,
+            programId: _selectedStudent!.programId,
+            departmentId: user.departmentUnit,
+            subjectCode: _selectedCourse!.subjectCode,
+          ),
+        );
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Berjaya disimpan!')),
+        SnackBar(content: Text(_isEdit ? 'Berjaya dikemaskini!' : 'Berjaya disimpan!')),
       );
       Navigator.pop(context, true);
     } catch (e) {
@@ -94,7 +144,7 @@ class _DisciplineFormScreenState extends State<DisciplineFormScreen> {
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
-      title: 'Borang Laporan Disiplin',
+      title: _isEdit ? 'Edit Laporan Disiplin' : 'Borang Laporan Disiplin',
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : Center(
@@ -110,21 +160,7 @@ class _DisciplineFormScreenState extends State<DisciplineFormScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            DropdownButtonFormField<Student>(
-                              initialValue: _selectedStudent,
-                              decoration:
-                                  const InputDecoration(labelText: 'Nama Pelajar'),
-                              items: _students
-                                  .map((s) => DropdownMenuItem(
-                                      value: s,
-                                      child: Text(
-                                          '${s.fullName} (${s.studentId})')))
-                                  .toList(),
-                              onChanged: (v) =>
-                                  setState(() => _selectedStudent = v),
-                              validator: (v) =>
-                                  v == null ? 'Wajib pilih pelajar' : null,
-                            ),
+                            if (_isEdit) ..._readonlyContext() else ..._lecturerInputs(),
                             const SizedBox(height: 16),
                             DropdownButtonFormField<String>(
                               initialValue: _issueType,
@@ -207,8 +243,8 @@ class _DisciplineFormScreenState extends State<DisciplineFormScreen> {
                                       child: CircularProgressIndicator(
                                           strokeWidth: 2, color: Colors.white),
                                     )
-                                  : const Icon(Icons.send),
-                              label: const Text('Hantar Laporan'),
+                                  : Icon(_isEdit ? Icons.save : Icons.send),
+                              label: Text(_isEdit ? 'Simpan Perubahan' : 'Hantar Laporan'),
                             ),
                           ],
                         ),
@@ -219,5 +255,81 @@ class _DisciplineFormScreenState extends State<DisciplineFormScreen> {
               ),
             ),
     );
+  }
+
+  List<Widget> _lecturerInputs() {
+    if (_courses.isEmpty) {
+      return [
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: Text(
+            'Anda tiada kursus yang diperuntukkan. Sila hubungi pentadbir.',
+            style: TextStyle(color: AppTheme.textMuted),
+          ),
+        ),
+      ];
+    }
+    final filteredStudents = _studentsForSelectedCourse;
+    return [
+      DropdownButtonFormField<TimetableEntry>(
+        initialValue: _selectedCourse,
+        decoration: const InputDecoration(labelText: 'Kursus'),
+        items: _courses
+            .map((c) => DropdownMenuItem(
+                value: c,
+                child: Text('${c.subjectCode} — ${c.subjectName}')))
+            .toList(),
+        onChanged: (v) => setState(() {
+          _selectedCourse = v;
+          if (_selectedStudent != null &&
+              v != null &&
+              _selectedStudent!.programId != v.departmentUnit) {
+            _selectedStudent = null;
+          }
+        }),
+        validator: (v) => v == null ? 'Wajib pilih kursus' : null,
+      ),
+      const SizedBox(height: 16),
+      DropdownButtonFormField<Student>(
+        initialValue:
+            filteredStudents.contains(_selectedStudent) ? _selectedStudent : null,
+        decoration: const InputDecoration(labelText: 'Nama Pelajar'),
+        items: filteredStudents
+            .map((s) => DropdownMenuItem(
+                value: s,
+                child: Text('${s.fullName} (${s.studentId})')))
+            .toList(),
+        onChanged: (v) => setState(() => _selectedStudent = v),
+        validator: (v) => v == null ? 'Wajib pilih pelajar' : null,
+      ),
+    ];
+  }
+
+  List<Widget> _readonlyContext() {
+    final r = _editing!;
+    return [
+      _readonlyField('Pelajar', r.studentName ?? r.studentId),
+      const SizedBox(height: 12),
+      _readonlyField('Kursus', r.subjectCode ?? '-'),
+      const SizedBox(height: 12),
+      _readonlyField('Program', r.programId ?? '-'),
+    ];
+  }
+
+  Widget _readonlyField(String label, String value) {
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: label,
+        filled: true,
+        fillColor: Colors.grey.shade100,
+      ),
+      child: Text(value, style: const TextStyle(color: AppTheme.navy)),
+    );
+  }
+
+  @override
+  void dispose() {
+    _notesCtrl.dispose();
+    super.dispose();
   }
 }

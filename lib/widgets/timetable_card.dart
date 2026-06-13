@@ -61,26 +61,26 @@ class TimetableCard extends StatelessWidget {
     final isSubmitted = state == SessionState.telahDihantar;
     final dateLabel = nextSessionDate(entry.day);
 
-    final borderColor = isOngoing
-        ? AppTheme.teal
-        : (isSubmitted ? AppTheme.slateBorder : AppTheme.slateBorder);
-    final borderWidth = isOngoing ? 2.0 : 1.0;
-
     return Card(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: borderColor, width: borderWidth),
+        side: BorderSide(
+          color: isOngoing ? AppTheme.teal : AppTheme.slateBorder,
+          width: isOngoing ? 2.0 : 1.0,
+        ),
       ),
+      // Subtle teal tint when the class is ongoing
       color: isOngoing
-          ? AppTheme.teal.withValues(alpha: 0.04)
+          ? AppTheme.teal.withOpacity(0.04)
           : Colors.white,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Pengepala: nama subjek + lencana status ──
+            // ── Header row: subject + state badge ──
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: Column(
@@ -94,13 +94,11 @@ class TimetableCard extends StatelessWidget {
                           color: AppTheme.navy,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 2),
                       Text(
                         entry.subjectCode,
                         style: const TextStyle(
-                          fontSize: 13,
-                          color: AppTheme.textMuted,
-                        ),
+                            fontSize: 13, color: AppTheme.textMuted),
                       ),
                     ],
                   ),
@@ -108,17 +106,13 @@ class TimetableCard extends StatelessWidget {
                 _stateBadge(),
               ],
             ),
+
             const SizedBox(height: 12),
             const Divider(height: 1),
             const SizedBox(height: 10),
 
-            // ── Baris maklumat ──
-            // Hari + tarikh dalam satu baris, contoh: "Isnin — 6 Jan 2025"
-            _infoRow(
-              Icons.calendar_today_outlined,
-              '${entry.day}  —  $dateLabel',
-              highlight: isOngoing,
-            ),
+            // ── Info rows ──
+            _infoRow(Icons.calendar_today_outlined, entry.day),
             _infoRow(Icons.access_time_outlined, entry.timeSlot),
             if (entry.roomName != null)
               _infoRow(Icons.meeting_room_outlined, entry.roomName!),
@@ -129,22 +123,23 @@ class TimetableCard extends StatelessWidget {
 
             const SizedBox(height: 14),
 
-            // ── Butang tindakan ──
+            // ── Action button ──
             SizedBox(
               width: double.infinity,
               child: isSubmitted
                   ? OutlinedButton.icon(
                       onPressed: onViewAttendance,
-                      icon: const Icon(Icons.visibility, color: AppTheme.teal),
+                      icon: const Icon(Icons.visibility_outlined,
+                          color: AppTheme.teal),
                       label: const Text(
-                        'Lihat Kehadiran',
+                        'Lihat Kehadiran / View Attendance',
                         style: TextStyle(color: AppTheme.teal),
                       ),
                     )
                   : ElevatedButton.icon(
                       onPressed: onTakeAttendance,
                       icon: const Icon(Icons.checklist_rtl),
-                      label: const Text('Ambil Kehadiran'),
+                      label: const Text('Ambil Kehadiran / Take Attendance'),
                     ),
             ),
           ],
@@ -155,24 +150,15 @@ class TimetableCard extends StatelessWidget {
 
   Widget _infoRow(IconData icon, String value, {bool highlight = false}) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.only(bottom: 5),
       child: Row(
         children: [
-          Icon(
-            icon,
-            size: 15,
-            color: highlight ? AppTheme.teal : AppTheme.textMuted,
-          ),
+          Icon(icon, size: 15, color: AppTheme.textMuted),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               value,
-              style: TextStyle(
-                fontSize: 13,
-                color: highlight ? AppTheme.teal : AppTheme.textDark,
-                fontWeight:
-                    highlight ? FontWeight.w600 : FontWeight.normal,
-              ),
+              style: const TextStyle(fontSize: 13, color: AppTheme.textDark),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -184,11 +170,14 @@ class TimetableCard extends StatelessWidget {
   Widget _stateBadge() {
     switch (state) {
       case SessionState.sedangBerlangsung:
-        return const StatusBadge(text: 'Sedang Berlangsung', color: AppTheme.teal);
+        return const StatusBadge(
+            text: 'Sedang Berlangsung', color: AppTheme.teal);
       case SessionState.telahDihantar:
-        return const StatusBadge(text: 'Telah Dihantar', color: AppTheme.tealDark);
+        return const StatusBadge(
+            text: 'Telah Dihantar', color: AppTheme.tealDark);
       case SessionState.akanDatang:
-        return const StatusBadge(text: 'Akan Datang', color: AppTheme.textMuted);
+        return const StatusBadge(
+            text: 'Akan Datang', color: AppTheme.textMuted);
     }
   }
 }

@@ -1,6 +1,4 @@
 // lib/models/timetable_entry.dart
-//
-// Model entri jadual waktu. Memetakan jadual `public.timetable`.
 class TimetableEntry {
   final String id;
   final String subjectCode;
@@ -9,11 +7,12 @@ class TimetableEntry {
   final String? lecturerId;
   final String? lecturerName;
   final String day;
-  final String startTime; // 'HH:MM:SS'
+  final String startTime;
   final String endTime;
   final int? roomId;
   final String? roomName;
   final String? session;
+  final String? kelas; // e.g. DGS4A, DPP4A — from students.kelas
 
   const TimetableEntry({
     required this.id,
@@ -28,25 +27,34 @@ class TimetableEntry {
     this.roomId,
     this.roomName,
     this.session,
+    this.kelas,
   });
 
   factory TimetableEntry.fromJson(Map<String, dynamic> json) {
-    final rooms = json['rooms'];
+    final profileJoin = json['profiles'];
+    final String? lecturerName = profileJoin is Map<String, dynamic>
+        ? profileJoin['full_name'] as String?
+        : json['lecturer_name'] as String?;
+
+    final roomJoin = json['rooms'];
+    final String? roomName = roomJoin is Map<String, dynamic>
+        ? roomJoin['room_name'] as String?
+        : json['room_name'] as String?;
+
     return TimetableEntry(
       id: json['id'] as String,
       subjectCode: (json['subject_code'] ?? '') as String,
       subjectName: (json['subject_name'] ?? '') as String,
       departmentUnit: (json['department_unit'] ?? '') as String,
       lecturerId: json['lecturer_id'] as String?,
-      lecturerName: json['lecturer_name'] as String?,
+      lecturerName: lecturerName,
       day: (json['day'] ?? 'Isnin') as String,
       startTime: (json['start_time'] ?? '00:00:00').toString(),
       endTime: (json['end_time'] ?? '00:00:00').toString(),
       roomId: json['room_id'] as int?,
-      roomName: rooms is Map<String, dynamic>
-          ? rooms['room_name'] as String?
-          : json['room_name'] as String?,
+      roomName: roomName,
       session: json['session'] as String?,
+      kelas: json['kelas'] as String?,
     );
   }
 
@@ -60,22 +68,26 @@ class TimetableEntry {
         'end_time': endTime,
         'room_id': roomId,
         'session': session,
+        'kelas': kelas,
       };
 
-  /// Tentukan jika slot ini sedang berlangsung berbanding waktu semasa.
+  String get timeSlot {
+    String hhmm(String s) => s.length >= 5 ? s.substring(0, 5) : s;
+    return '${hhmm(startTime)} - ${hhmm(endTime)}';
+  }
+
   bool isCurrentlyOngoing(DateTime now) {
     if (!_dayMatches(now)) return false;
-    final start = _parse(startTime);
-    final end = _parse(endTime);
+    final start = _parseDuration(startTime);
+    final end = _parseDuration(endTime);
     final cur = Duration(hours: now.hour, minutes: now.minute);
     return cur >= start && cur < end;
   }
 
-  /// Tentukan jika slot ini akan datang pada hari ini.
   bool isUpcomingToday(DateTime now) {
     if (!_dayMatches(now)) return false;
     final cur = Duration(hours: now.hour, minutes: now.minute);
-    return cur < _parse(startTime);
+    return cur < _parseDuration(startTime);
   }
 
   bool _dayMatches(DateTime now) {
@@ -89,16 +101,11 @@ class TimetableEntry {
     return map[now.weekday] == day;
   }
 
-  Duration _parse(String t) {
+  Duration _parseDuration(String t) {
     final parts = t.split(':');
     return Duration(
       hours: int.tryParse(parts[0]) ?? 0,
       minutes: parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0,
     );
-  }
-
-  String get timeSlot {
-    String hhmm(String s) => s.length >= 5 ? s.substring(0, 5) : s;
-    return '${hhmm(startTime)} - ${hhmm(endTime)}';
   }
 }

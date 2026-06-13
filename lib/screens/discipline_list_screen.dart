@@ -6,7 +6,6 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../models/discipline_report.dart';
-import '../models/user_profile.dart';
 import '../providers/user_provider.dart';
 import '../services/discipline_service.dart';
 import '../theme/app_theme.dart';
@@ -25,7 +24,6 @@ class _DisciplineListScreenState extends State<DisciplineListScreen> {
   late Future<List<DisciplineReport>> _future;
   String _search = '';
   String _severityFilter = 'Semua';
-  String? _simulatedRole;
 
   @override
   void initState() {
@@ -33,21 +31,19 @@ class _DisciplineListScreenState extends State<DisciplineListScreen> {
     _future = _load();
   }
 
-  UserProfile _effectiveUser(UserProfile actual) {
-    if (_simulatedRole == null || _simulatedRole == actual.role) return actual;
-    return actual.copyWith(role: _simulatedRole);
-  }
-
   Future<List<DisciplineReport>> _load() async {
-    final actual = context.read<UserProvider>().profile!;
-    final effective = _effectiveUser(actual);
-    return _service.fetchReports(effective);
+    final user = context.read<UserProvider>().profile!;
+    return _service.fetchReports(user);
   }
 
   void _refresh() => setState(() => _future = _load());
 
   @override
   Widget build(BuildContext context) {
+    final user = context.watch<UserProvider>().profile;
+    final canCreate = user?.role == 'Lecturer';
+    final canManage = user?.role == 'Admin';
+
     return AppScaffold(
       title: 'Laporan Disiplin',
       actions: [
@@ -56,15 +52,17 @@ class _DisciplineListScreenState extends State<DisciplineListScreen> {
           onPressed: _refresh,
         ),
       ],
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: AppTheme.teal,
-        onPressed: () async {
-          final ok = await Navigator.pushNamed(context, '/discipline-form');
-          if (ok == true) _refresh();
-        },
-        icon: const Icon(Icons.add),
-        label: const Text('Laporan Baru'),
-      ),
+      floatingActionButton: canCreate
+          ? FloatingActionButton.extended(
+              backgroundColor: AppTheme.teal,
+              onPressed: () async {
+                final ok = await Navigator.pushNamed(context, '/discipline-form');
+                if (ok == true) _refresh();
+              },
+              icon: const Icon(Icons.add),
+              label: const Text('Laporan Baru'),
+            )
+          : null,
       body: Column(
         children: [
           _filterBar(),
@@ -88,7 +86,7 @@ class _DisciplineListScreenState extends State<DisciplineListScreen> {
                 return ListView.builder(
                   padding: const EdgeInsets.all(16),
                   itemCount: reports.length,
-                  itemBuilder: (_, i) => _reportCard(reports[i]),
+                  itemBuilder: (_, i) => _reportCard(reports[i], canManage: canManage),
                 );
               },
             ),
@@ -103,7 +101,8 @@ class _DisciplineListScreenState extends State<DisciplineListScreen> {
     if (_search.isEmpty) return true;
     final q = _search.toLowerCase();
     return (r.studentName ?? '').toLowerCase().contains(q) ||
-        r.issueType.toLowerCase().contains(q);
+        r.issueType.toLowerCase().contains(q) ||
+        (r.subjectCode ?? '').toLowerCase().contains(q);
   }
 
   Widget _filterBar() {
@@ -119,7 +118,7 @@ class _DisciplineListScreenState extends State<DisciplineListScreen> {
             width: 320,
             child: TextField(
               decoration: const InputDecoration(
-                hintText: 'Cari pelajar atau jenis isu...',
+                hintText: 'Cari pelajar, kursus atau jenis isu...',
                 prefixIcon: Icon(Icons.search),
               ),
               onChanged: (v) => setState(() => _search = v),
@@ -137,30 +136,48 @@ class _DisciplineListScreenState extends State<DisciplineListScreen> {
                   setState(() => _severityFilter = v ?? 'Semua'),
             ),
           ),
-          SizedBox(
-            width: 240,
-            child: DropdownButtonFormField<String>(
-              initialValue: _simulatedRole,
-              decoration: const InputDecoration(labelText: 'Simulasi Skop Peranan'),
-              items: [
-                const DropdownMenuItem<String>(value: null, child: Text('— Sebenar —')),
-                ...['Lecturer', 'Ketua Program', 'Ketua Jabatan', 'Admin']
-                    .map((r) => DropdownMenuItem(value: r, child: Text(r))),
-              ],
-              onChanged: (v) {
-                setState(() {
-                  _simulatedRole = v;
-                  _future = _load();
-                });
-              },
-            ),
-          ),
         ],
       ),
     );
   }
 
-  Widget _reportCard(DisciplineReport r) {
+  Future<void> _confirmDelete(DisciplineReport r) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Padam Laporan?'),
+        content: Text(
+            'Anda pasti mahu memadam laporan untuk ${r.studentName ?? r.studentId}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Padam'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || r.id == null) return;
+    try {
+      await _service.deleteReport(r.id!);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Laporan dipadam.')),
+      );
+      _refresh();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ralat: $e')),
+      );
+    }
+  }
+
+  Widget _reportCard(DisciplineReport r, {required bool canManage}) {
     final df = DateFormat('d MMM yyyy', 'ms');
     return Card(
       child: Padding(
@@ -182,7 +199,7 @@ class _DisciplineListScreenState extends State<DisciplineListScreen> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${r.programId ?? "-"} • ${r.issueType}',
+                    '${r.programId ?? "-"} • ${r.subjectCode ?? "-"} • ${r.issueType}',
                     style: const TextStyle(color: AppTheme.textMuted),
                   ),
                   const SizedBox(height: 8),
@@ -201,7 +218,34 @@ class _DisciplineListScreenState extends State<DisciplineListScreen> {
                 ],
               ),
             ),
-            SeverityBadge(severity: r.severity),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                SeverityBadge(severity: r.severity),
+                if (canManage) ...[
+                  const SizedBox(height: 8),
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert),
+                    onSelected: (v) async {
+                      if (v == 'edit') {
+                        final ok = await Navigator.pushNamed(
+                          context,
+                          '/discipline-form',
+                          arguments: r,
+                        );
+                        if (ok == true) _refresh();
+                      } else if (v == 'delete') {
+                        await _confirmDelete(r);
+                      }
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'edit', child: Text('Edit')),
+                      PopupMenuItem(value: 'delete', child: Text('Padam')),
+                    ],
+                  ),
+                ],
+              ],
+            ),
           ],
         ),
       ),

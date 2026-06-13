@@ -9,11 +9,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config/supabase_config.dart';
 import 'providers/user_provider.dart';
+import 'screens/admin_booking_monitor_screen.dart';
 import 'screens/admin_room_screen.dart';
 import 'screens/admin_screen.dart';
 import 'screens/attendance_screen.dart';
 import 'screens/discipline_form_screen.dart';
 import 'screens/discipline_list_screen.dart';
+import 'screens/forgot_password_screen.dart';
 import 'screens/hierarchy_router.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
@@ -53,7 +55,9 @@ class EducatorApp extends StatelessWidget {
           '/': (_) => const HierarchyRouter(),
           '/login': (_) => const LoginScreen(),
           '/register': (_) => const RegisterScreen(),
+          '/forgot-password': (_) => const ForgotPasswordScreen(),
           '/admin': (_) => const AdminScreen(),
+          '/admin-booking-monitor': (_) => const AdminBookingMonitorScreen(),
           '/admin-rooms': (_) => const AdminRoomScreen(),
           '/timetable': (_) => const TimetableScreen(),
           '/timetable-upload': (_) => const TimetableUploadScreen(),

@@ -30,7 +30,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         fullName: _nameCtrl.text.trim(),
         email: _emailCtrl.text.trim(),
         password: _passwordCtrl.text,
-        role: _role,
+        requestedRole: _role,
         departmentUnit: _unit,
       );
       if (!mounted) return;
