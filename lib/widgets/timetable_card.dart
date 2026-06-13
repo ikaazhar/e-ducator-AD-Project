@@ -1,6 +1,7 @@
 // lib/widgets/timetable_card.dart
 //
 // Kad jadual waktu (M5). Memaparkan butiran sesi dan butang ambil/lihat kehadiran.
+// Tambahan: paparan tarikh sesi seterusnya berdasarkan hari kelas.
 import 'package:flutter/material.dart';
 
 import '../models/timetable_entry.dart';
@@ -8,6 +9,37 @@ import '../theme/app_theme.dart';
 import 'status_badge.dart';
 
 enum SessionState { akanDatang, sedangBerlangsung, telahDihantar }
+
+// ---------------------------------------------------------------------------
+// Pembantu: Kira tarikh sesi seterusnya berdasarkan hari kelas.
+// ---------------------------------------------------------------------------
+
+/// Kembalikan tarikh sesi terdekat untuk hari [malayDay].
+/// Jika hari ini adalah hari berkenaan, kembalikan tarikh hari ini.
+String nextSessionDate(String malayDay) {
+  const dayMap = {
+    'Isnin': DateTime.monday,
+    'Selasa': DateTime.tuesday,
+    'Rabu': DateTime.wednesday,
+    'Khamis': DateTime.thursday,
+    'Jumaat': DateTime.friday,
+  };
+  const months = [
+    'Jan', 'Feb', 'Mac', 'Apr', 'Mei', 'Jun',
+    'Jul', 'Ogs', 'Sep', 'Okt', 'Nov', 'Dis',
+  ];
+  final target = dayMap[malayDay] ?? DateTime.monday;
+  var date = DateTime.now();
+  // Cari tarikh paling dekat (termasuk hari ini)
+  while (date.weekday != target) {
+    date = date.add(const Duration(days: 1));
+  }
+  return '${date.day} ${months[date.month - 1]} ${date.year}';
+}
+
+// ---------------------------------------------------------------------------
+// Widget Kad Jadual
+// ---------------------------------------------------------------------------
 
 class TimetableCard extends StatelessWidget {
   final TimetableEntry entry;
@@ -27,6 +59,7 @@ class TimetableCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isOngoing = state == SessionState.sedangBerlangsung;
     final isSubmitted = state == SessionState.telahDihantar;
+    final dateLabel = nextSessionDate(entry.day);
 
     return Card(
       shape: RoundedRectangleBorder(
@@ -115,7 +148,7 @@ class TimetableCard extends StatelessWidget {
     );
   }
 
-  Widget _infoRow(IconData icon, String value) {
+  Widget _infoRow(IconData icon, String value, {bool highlight = false}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 5),
       child: Row(

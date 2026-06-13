@@ -83,12 +83,20 @@ class AttendanceRow extends StatelessWidget {
   });
 
   double get _percentHadir {
-    int attended = 0;
+    int tidakHadir = 0;
+    int totalRecorded = 0;
     for (int w = 1; w <= kTotalMinggu; w++) {
       final s = weeklyStatus[w];
-      if (s == 'Hadir' || s == 'MC' || s == 'CK') attended++;
+      if (s != null) {
+        totalRecorded++;
+        if (s == 'Tak Hadir') tidakHadir++;
+      }
     }
-    return (attended / kTotalMinggu) * 100;
+    // Jika tiada rekod lagi, papar 100%
+    if (totalRecorded == 0) return 100.0;
+    // Tolak peratusan ketidakhadiran dari 100%
+    // MC dan CK tidak menjejaskan peratusan
+    return 100.0 - (tidakHadir / kTotalMinggu) * 100;
   }
 
   Color get _percentColor {
