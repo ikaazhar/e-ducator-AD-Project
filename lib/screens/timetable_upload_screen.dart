@@ -1,10 +1,10 @@
 // lib/screens/timetable_upload_screen.dart
 //
-// Modul 4: Muat Naik Jadual Waktu.
-// - Admin: CRUD penuh semua unit.
-// - Ketua Program: CRUD untuk unit sendiri sahaja.
-// - Ketua Jabatan / Pensyarah: Lihat sahaja.
-// - Mengetuk baris jadual → buka AttendanceScreen untuk kelas berkenaan.
+// Modul 4: Muat Naik Jadual Waktu — Enhanced UI.
+// - Admin / Ketua Jabatan / Ketua Program: boleh tambah, edit, padam.
+// - Pensyarah: lihat sahaja.
+// - Paparan jadual berbentuk grid mingguan IKM + senarai kad berwarna.
+// - Ketuk mana-mana kelas → buka AttendanceScreen dengan tarikh kelas betul.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -18,54 +18,122 @@ import '../services/timetable_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_scaffold.dart';
 
+// ─── Dummy semester start date (Week 1 = this date) ──────────────────────────
+// Tarikh mula semester semasa — digunakan untuk kira tarikh setiap minggu.
+// Tukar nilai ini mengikut semester semasa.
+const String kSemesterStart = '2026-01-06'; // Isnin, 6 Jan 2026
+
+// ─── Day colour palette ───────────────────────────────────────────────────────
+const Map<String, Color> kDayColors = {
+  'Isnin':  Color(0xFF3B82F6), // blue
+  'Selasa': Color(0xFF8B5CF6), // purple
+  'Rabu':   Color(0xFF0FB5A6), // teal
+  'Khamis': Color(0xFFF59E0B), // amber
+  'Jumaat': Color(0xFF10B981), // green
+};
+
+// ─── Unit colour palette ──────────────────────────────────────────────────────
+Color _unitColor(String unit) {
+  const map = {
+    'DGS': Color(0xFF3B82F6),
+    'DPP': Color(0xFF8B5CF6),
+    'DED': Color(0xFFF59E0B),
+    'DEK': Color(0xFF10B981),
+    'DCP': Color(0xFFEF4444),
+    'DCB': Color(0xFFEC4899),
+    'ITW': Color(0xFF0FB5A6),
+  };
+  return map[unit] ?? AppTheme.navy;
+}
+
+// ─── Compute the calendar date for a given weekday in semester week W ─────────
+String _dateForWeek(int semWeek, String day) {
+  const dayOffset = {
+    'Isnin': 0, 'Selasa': 1, 'Rabu': 2, 'Khamis': 3, 'Jumaat': 4,
+  };
+  try {
+    final parts = kSemesterStart.split('-');
+    final base = DateTime(
+      int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]),
+    );
+    final weekStart = base.add(Duration(days: (semWeek - 1) * 7));
+    final offset = dayOffset[day] ?? 0;
+    final d = weekStart.add(Duration(days: offset));
+    return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  } catch (_) {
+    return kSemesterStart;
+  }
+}
+
+// ─── Which semester week is today? ────────────────────────────────────────────
+int _currentSemesterWeek() {
+  try {
+    final parts = kSemesterStart.split('-');
+    final base = DateTime(
+      int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]),
+    );
+    final diff = DateTime.now().difference(base).inDays;
+    if (diff < 0) return 1;
+    return (diff ~/ 7) + 1;
+  } catch (_) {
+    return 1;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCREEN
+// ─────────────────────────────────────────────────────────────────────────────
+
 class TimetableUploadScreen extends StatefulWidget {
   const TimetableUploadScreen({super.key});
-
   @override
   State<TimetableUploadScreen> createState() => _TimetableUploadScreenState();
 }
 
-class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
+class _TimetableUploadScreenState extends State<TimetableUploadScreen>
+    with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
-  final _service = TimetableService();
+  final _service  = TimetableService();
   final _roomService = RoomService();
 
-  // Form controllers
-  final _codeCtrl = TextEditingController();
-  final _nameCtrl = TextEditingController();
+  // controllers
+  final _codeCtrl    = TextEditingController();
+  final _nameCtrl    = TextEditingController();
   final _sessionCtrl = TextEditingController();
 
-  // Form state
-  String _unit = kJabatanList.first;
-  String _day = kHariList.first;
-  TimeOfDay _start = const TimeOfDay(hour: 8, minute: 0);
-  TimeOfDay _end = const TimeOfDay(hour: 10, minute: 0);
-  int? _roomId;
-  String? _lecturerId;
-  String? _kelas;
+  // form state
+  String   _unit      = kJabatanList.first;
+  String   _day       = kHariList.first;
+  TimeOfDay _start    = const TimeOfDay(hour: 8,  minute: 0);
+  TimeOfDay _end      = const TimeOfDay(hour: 10, minute: 0);
+  int?     _roomId;
+  String?  _lecturerId;
+  String?  _kelas;
 
-  // Data
-  List<Room> _rooms = const [];
-  List<UserProfile> _lecturers = const [];
-  List<String> _kelasList = const [];
+  // data
+  List<Room>         _rooms     = const [];
+  List<UserProfile>  _lecturers = const [];
+  List<String>       _kelasList = const [];
   List<TimetableEntry> _entries = const [];
   TimetableStats _stats = const TimetableStats(
-    totalClasses: 0,
-    roomsInUse: 0,
-    lecturersScheduled: 0,
-    classesToday: 0,
+    totalClasses: 0, roomsInUse: 0, lecturersScheduled: 0, classesToday: 0,
   );
 
-  // UI state
-  bool _loading = true;
-  bool _saving = false;
-  String _searchQuery = '';
+  // UI
+  bool    _loading      = true;
+  bool    _saving       = false;
+  bool    _showForm     = false;
+  String  _searchQuery  = '';
   String? _filterDay;
   String? _filterKelas;
+  bool    _gridView     = true; // toggle: grid vs card list
+
+  late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     final user = context.read<UserProvider>().profile;
     if (user?.role == 'Ketua Program' && user?.departmentUnit != null) {
       _unit = user!.departmentUnit!;
@@ -78,182 +146,112 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
     _codeCtrl.dispose();
     _nameCtrl.dispose();
     _sessionCtrl.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
-  // ─── DATA LOADING ─────────────────────────────────────────
+  // ─── LOAD ───────────────────────────────────────────────────────────────────
 
   Future<void> _bootstrap() async {
     setState(() => _loading = true);
-    await Future.wait([
-      _loadRooms(),
-      _loadLecturers(),
-      _loadKelas(),
-      _loadEntries(),
-    ]);
+    await Future.wait([_loadRooms(), _loadLecturers(), _loadKelas(), _loadEntries()]);
     await _loadStats();
     if (mounted) setState(() => _loading = false);
   }
 
-  Future<void> _loadRooms() async {
-    _rooms = await _roomService.fetchAvailableRooms();
-  }
-
-  Future<void> _loadLecturers() async {
-    _lecturers = await _service.fetchLecturersByUnit(_unit);
-  }
+  Future<void> _loadRooms()     async => _rooms     = await _roomService.fetchAvailableRooms();
+  Future<void> _loadLecturers() async => _lecturers = await _service.fetchLecturersByUnit(_unit);
+  Future<void> _loadEntries()   async => _entries   = await _service.fetchAllTimetable(departmentUnit: _scopeUnit());
+  Future<void> _loadStats()     async => _stats     = await _service.fetchStats(departmentUnit: _scopeUnit());
 
   Future<void> _loadKelas() async {
     _kelasList = await _service.fetchKelasByUnit(_unit);
-    if (_kelas != null && !_kelasList.contains(_kelas)) {
-      _kelas = null;
-    }
-  }
-
-  Future<void> _loadEntries() async {
-    _entries = await _service.fetchAllTimetable(
-      departmentUnit: _scopeUnit(),
-    );
-  }
-
-  Future<void> _loadStats() async {
-    _stats = await _service.fetchStats(departmentUnit: _scopeUnit());
+    if (_kelas != null && !_kelasList.contains(_kelas)) _kelas = null;
   }
 
   String? _scopeUnit() {
-    final user = context.read<UserProvider>().profile;
-    if (user?.role == 'Ketua Program') return user?.departmentUnit;
-    return null;
+    final u = context.read<UserProvider>().profile;
+    return u?.role == 'Ketua Program' ? u?.departmentUnit : null;
   }
 
-  // ─── NAVIGATION TO ATTENDANCE ──────────────────────────────
+  // ─── ATTENDANCE NAV ─────────────────────────────────────────────────────────
 
-  /// Apabila pensyarah mengetuk baris jadual, buka skrin kehadiran
-  /// untuk kelas berkenaan dengan senarai pelajar yang betul.
-  void _openAttendance(TimetableEntry entry) {
+  void _openAttendance(TimetableEntry entry, {int? semWeek}) {
     final user = context.read<UserProvider>().profile;
-
-    // Only lecturers, Ketua Program, and Admin can take attendance
     if (user == null) return;
-
+    final week = semWeek ?? _currentSemesterWeek();
+    final date = _dateForWeek(week, entry.day);
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => AttendanceScreen(
-          timetableId: entry.id,
-          subjectName: entry.subjectName,
-          subjectCode: entry.subjectCode,
+          timetableId:    entry.id,
+          subjectName:    entry.subjectName,
+          subjectCode:    entry.subjectCode,
           departmentUnit: entry.departmentUnit,
-          kelas: entry.kelas, // pass kelas so only correct students load
-          attendanceDate: _todayDateString(),
-          userId: user.id,
+          kelas:          entry.kelas,
+          attendanceDate: kSemesterStart, // semester start → week picker drives dates
+          userId:         user.id,
         ),
       ),
     );
   }
 
-  String _todayDateString() {
-    final now = DateTime.now();
-    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-  }
-
-  // ─── FORM HELPERS ──────────────────────────────────────────
+  // ─── FORM HELPERS ───────────────────────────────────────────────────────────
 
   String _formatTime(TimeOfDay t) =>
-      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:00';
+      '${t.hour.toString().padLeft(2,'0')}:${t.minute.toString().padLeft(2,'0')}:00';
 
-  bool _endAfterStart() {
-    return _end.hour > _start.hour ||
-        (_end.hour == _start.hour && _end.minute > _start.minute);
-  }
+  bool _endAfterStart() =>
+      _end.hour > _start.hour || (_end.hour == _start.hour && _end.minute > _start.minute);
 
   Future<void> _pickTime({required bool isStart}) async {
-    final picked = await showTimePicker(
+    final p = await showTimePicker(
       context: context,
       initialTime: isStart ? _start : _end,
     );
-    if (picked == null) return;
-    setState(() {
-      if (isStart) {
-        _start = picked;
-      } else {
-        _end = picked;
-      }
-    });
+    if (p == null) return;
+    setState(() { if (isStart) _start = p; else _end = p; });
   }
 
-  // ─── SUBMIT ────────────────────────────────────────────────
+  // ─── SUBMIT ─────────────────────────────────────────────────────────────────
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_kelas == null) {
-      _showSnack('Sila pilih kelas / Please select a class.', isError: true);
-      return;
-    }
-    if (_roomId == null) {
-      _showSnack('Sila pilih bilik / Please select a room.', isError: true);
-      return;
-    }
-    if (_lecturerId == null) {
-      _showSnack('Sila pilih pensyarah / Please select a lecturer.', isError: true);
-      return;
-    }
-    if (!_endAfterStart()) {
-      _showSnack(
-        'Waktu tamat mesti selepas waktu mula / End time must be after start time.',
-        isError: true,
-      );
-      return;
-    }
+    if (_kelas     == null) return _showSnack('Sila pilih kelas.',      isError: true);
+    if (_roomId    == null) return _showSnack('Sila pilih bilik.',      isError: true);
+    if (_lecturerId == null) return _showSnack('Sila pilih pensyarah.', isError: true);
+    if (!_endAfterStart())   return _showSnack('Waktu tamat mesti selepas waktu mula.', isError: true);
 
     setState(() => _saving = true);
     try {
       final startStr = _formatTime(_start);
-      final endStr = _formatTime(_end);
-
+      final endStr   = _formatTime(_end);
       final free = await _service.isRoomSlotFree(
-        roomId: _roomId!,
-        day: _day,
-        startTime: startStr,
-        endTime: endStr,
+        roomId: _roomId!, day: _day, startTime: startStr, endTime: endStr,
       );
       if (!free) {
         if (!mounted) return;
-        _showSnack(
-          'Bilik telah ditempah untuk slot ini / Room already occupied for this slot!',
-          isError: true,
-        );
-        return;
+        return _showSnack('Bilik telah ditempah untuk slot ini!', isError: true);
       }
-
       if (!mounted) return;
       final user = context.read<UserProvider>().profile!;
       await _service.insertTimetable(
         TimetableEntry(
-          id: '',
-          subjectCode: _codeCtrl.text.trim(),
-          subjectName: _nameCtrl.text.trim(),
-          departmentUnit: _unit,
-          lecturerId: _lecturerId,
-          day: _day,
-          startTime: startStr,
-          endTime: endStr,
+          id: '', subjectCode: _codeCtrl.text.trim(),
+          subjectName: _nameCtrl.text.trim(), departmentUnit: _unit,
+          lecturerId: _lecturerId, day: _day,
+          startTime: startStr, endTime: endStr,
           roomId: _roomId,
           session: _sessionCtrl.text.trim().isEmpty ? null : _sessionCtrl.text.trim(),
           kelas: _kelas,
         ),
         createdBy: user.id,
       );
-
       if (!mounted) return;
-      _showSnack('Jadual berjaya dimuat naik! / Schedule saved successfully!');
-      _codeCtrl.clear();
-      _nameCtrl.clear();
-      setState(() {
-        _lecturerId = null;
-        _roomId = null;
-        _kelas = null;
-      });
+      _showSnack('Jadual berjaya disimpan!');
+      _codeCtrl.clear(); _nameCtrl.clear();
+      setState(() { _lecturerId = null; _roomId = null; _kelas = null; _showForm = false; });
       await _bootstrap();
     } catch (e) {
       if (mounted) _showSnack('Ralat: $e', isError: true);
@@ -262,19 +260,16 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
     }
   }
 
-  // ─── DELETE ────────────────────────────────────────────────
+  // ─── DELETE ─────────────────────────────────────────────────────────────────
 
   Future<void> _confirmDelete(TimetableEntry e) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Padam Entri?'),
-        content: Text('Padam ${e.subjectCode} – ${e.subjectName}\n${e.day} ${e.timeSlot}?'),
+        content: Text('${e.subjectCode} — ${e.subjectName}\n${e.day}  ${e.timeSlot}'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Batal'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Batal')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.tidakHadir),
             onPressed: () => Navigator.pop(context, true),
@@ -285,24 +280,24 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
     );
     if (ok != true) return;
     await _service.deleteTimetable(e.id);
-    _showSnack('Entri telah dipadam.');
+    _showSnack('Entri dipadam.');
     await _bootstrap();
   }
 
-  // ─── FILTER ────────────────────────────────────────────────
+  // ─── FILTER ─────────────────────────────────────────────────────────────────
 
-  List<TimetableEntry> get _filteredEntries {
+  List<TimetableEntry> get _filtered {
     return _entries.where((e) {
       final q = _searchQuery.toLowerCase();
-      final matchSearch = q.isEmpty ||
+      final ms = q.isEmpty ||
           e.subjectCode.toLowerCase().contains(q) ||
           e.subjectName.toLowerCase().contains(q) ||
           (e.lecturerName ?? '').toLowerCase().contains(q) ||
           (e.roomName ?? '').toLowerCase().contains(q) ||
           (e.kelas ?? '').toLowerCase().contains(q);
-      final matchDay = _filterDay == null || e.day == _filterDay;
-      final matchKelas = _filterKelas == null || e.kelas == _filterKelas;
-      return matchSearch && matchDay && matchKelas;
+      final md = _filterDay   == null || e.day   == _filterDay;
+      final mk = _filterKelas == null || e.kelas == _filterKelas;
+      return ms && md && mk;
     }).toList();
   }
 
@@ -314,426 +309,607 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
     ));
   }
 
-  // ─── BUILD ─────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────────
+  // BUILD
+  // ─────────────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final user = context.watch<UserProvider>().profile;
-    final canWrite = user?.role == 'Admin' || user?.role == 'Ketua Program';
+    final user     = context.watch<UserProvider>().profile;
+    final canWrite = user?.role == 'Admin' ||
+                     user?.role == 'Ketua Jabatan' ||
+                     user?.role == 'Ketua Program';
 
     return AppScaffold(
-      title: 'Muat Naik Jadual Waktu / Upload Timetable',
+      title: 'Jadual Waktu / Timetable',
       actions: [
         IconButton(
-          tooltip: 'Muat semula',
-          icon: const Icon(Icons.refresh),
-          onPressed: _bootstrap,
+          tooltip: _gridView ? 'Paparan Kad' : 'Paparan Grid',
+          icon: Icon(_gridView ? Icons.view_list : Icons.grid_view),
+          onPressed: () => setState(() => _gridView = !_gridView),
         ),
+        IconButton(tooltip: 'Muat semula', icon: const Icon(Icons.refresh), onPressed: _bootstrap),
+        if (canWrite)
+          IconButton(
+            tooltip: _showForm ? 'Tutup Borang' : 'Tambah Kelas',
+            icon: Icon(_showForm ? Icons.close : Icons.add),
+            onPressed: () => setState(() => _showForm = !_showForm),
+          ),
       ],
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1100),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildStatsBar(),
-                      const SizedBox(height: 20),
-                      if (canWrite) ...[
-                        _buildForm(),
-                        const SizedBox(height: 24),
-                      ],
-                      _buildListHeader(),
-                      const SizedBox(height: 12),
-                      _buildList(canWrite),
-                    ],
-                  ),
+          : Column(
+              children: [
+                // ── Banner header ──
+                _buildBanner(),
+                // ── Stats bar ──
+                _buildStatsRow(),
+                // ── Form (collapsible) ──
+                AnimatedCrossFade(
+                  firstChild: const SizedBox.shrink(),
+                  secondChild: canWrite ? _buildFormCard() : const SizedBox.shrink(),
+                  crossFadeState: _showForm && canWrite
+                      ? CrossFadeState.showSecond
+                      : CrossFadeState.showFirst,
+                  duration: const Duration(milliseconds: 250),
                 ),
-              ),
+                // ── Filters ──
+                _buildFilters(),
+                // ── Content ──
+                Expanded(
+                  child: _filtered.isEmpty
+                      ? _buildEmpty()
+                      : _gridView
+                          ? _buildWeeklyGrid()
+                          : _buildCardList(canWrite),
+                ),
+              ],
             ),
     );
   }
 
-  // ─── STATS BAR ─────────────────────────────────────────────
+  // ─── BANNER ─────────────────────────────────────────────────────────────────
 
-  Widget _buildStatsBar() {
-    return Row(
-      children: [
-        _statCard('Jumlah Kelas', _stats.totalClasses.toString(), Icons.class_, AppTheme.navy),
-        const SizedBox(width: 12),
-        _statCard('Bilik Digunakan', _stats.roomsInUse.toString(), Icons.meeting_room, AppTheme.teal),
-        const SizedBox(width: 12),
-        _statCard('Pensyarah Dijadualkan', _stats.lecturersScheduled.toString(), Icons.person, AppTheme.tealDark),
-        const SizedBox(width: 12),
-        _statCard('Kelas Hari Ini', _stats.classesToday.toString(), Icons.today, AppTheme.mc),
-      ],
+  Widget _buildBanner() {
+    final now   = DateTime.now();
+    final week  = _currentSemesterWeek();
+    final days  = ['Isnin','Selasa','Rabu','Khamis','Jumaat','Sabtu','Ahad'];
+    final today = now.weekday <= 5 ? days[now.weekday - 1] : '-';
+    return Container(
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [AppTheme.navy, Color(0xFF134074)],
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('JADUAL WAKTU — IKM JOHOR BAHRU',
+                    style: TextStyle(color: Colors.white70, fontSize: 11, letterSpacing: 1.2)),
+                const SizedBox(height: 4),
+                Text('Minggu $week  •  $today',
+                    style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 2),
+                Text('Sesi: ${_sessionCtrl.text.isEmpty ? "JAN-JUN 2026" : _sessionCtrl.text}',
+                    style: const TextStyle(color: Colors.white60, fontSize: 12)),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppTheme.teal.withOpacity(0.25),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppTheme.teal.withOpacity(0.5)),
+            ),
+            child: Column(children: [
+              Text('$week', style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900)),
+              const Text('MINGGU', style: TextStyle(color: Colors.white60, fontSize: 10, letterSpacing: 1)),
+            ]),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _statCard(String label, String value, IconData icon, Color color) {
+  // ─── STATS ROW ──────────────────────────────────────────────────────────────
+
+  Widget _buildStatsRow() {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          _miniStat(Icons.class_,        '${_stats.totalClasses}',       'Kelas',    AppTheme.navy),
+          _divider(),
+          _miniStat(Icons.meeting_room,  '${_stats.roomsInUse}',         'Bilik',    AppTheme.teal),
+          _divider(),
+          _miniStat(Icons.person,        '${_stats.lecturersScheduled}', 'Pensyarah',AppTheme.tealDark),
+          _divider(),
+          _miniStat(Icons.today,         '${_stats.classesToday}',       'Hari Ini', AppTheme.mc),
+        ],
+      ),
+    );
+  }
+
+  Widget _miniStat(IconData icon, String value, String label, Color color) {
     return Expanded(
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-          child: Row(
-            children: [
-              Icon(icon, color: color, size: 28),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: color)),
-                  Text(label, style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
-                ],
-              ),
-            ],
-          ),
-        ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 6),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: color)),
+            Text(label, style: const TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+          ]),
+        ],
       ),
     );
   }
 
-  // ─── FORM ──────────────────────────────────────────────────
+  Widget _divider() => Container(height: 32, width: 1, color: AppTheme.slateBorder);
 
-  Widget _buildForm() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Tambah Entri Jadual / Add Timetable Entry',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: AppTheme.navy),
-              ),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  _wrapField(
-                    width: 200,
-                    child: TextFormField(
-                      controller: _codeCtrl,
-                      decoration: const InputDecoration(labelText: 'Kod Subjek / Subject Code'),
-                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null,
-                    ),
-                  ),
-                  _wrapField(
-                    width: 280,
-                    child: TextFormField(
-                      controller: _nameCtrl,
-                      decoration: const InputDecoration(labelText: 'Nama Subjek / Subject Name'),
-                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null,
-                    ),
-                  ),
-                  _wrapField(
-                    width: 160,
-                    child: DropdownButtonFormField<String>(
-                      value: _unit,
-                      decoration: const InputDecoration(labelText: 'Jabatan / Unit'),
-                      items: kJabatanList
-                          .map((u) => DropdownMenuItem(value: u, child: Text(u)))
-                          .toList(),
-                      onChanged: (v) async {
-                        if (v == null) return;
-                        setState(() {
-                          _unit = v;
-                          _lecturerId = null;
-                          _kelas = null;
-                        });
-                        await Future.wait([_loadLecturers(), _loadKelas()]);
-                        setState(() {});
-                      },
-                    ),
-                  ),
-                  _wrapField(
-                    width: 160,
-                    child: DropdownButtonFormField<String>(
-                      value: _kelas,
-                      decoration: const InputDecoration(labelText: 'Kelas / Class'),
-                      hint: const Text('Pilih kelas'),
-                      items: _kelasList
-                          .map((k) => DropdownMenuItem(value: k, child: Text(k)))
-                          .toList(),
-                      onChanged: (v) => setState(() => _kelas = v),
-                    ),
-                  ),
-                  _wrapField(
-                    width: 260,
-                    child: DropdownButtonFormField<String>(
-                      value: _lecturerId,
-                      decoration: const InputDecoration(labelText: 'Pensyarah / Lecturer'),
-                      hint: const Text('Pilih pensyarah'),
-                      items: _lecturers
-                          .map((l) => DropdownMenuItem(value: l.id, child: Text(l.fullName)))
-                          .toList(),
-                      onChanged: (v) => setState(() => _lecturerId = v),
-                    ),
-                  ),
-                  _wrapField(
-                    width: 150,
-                    child: DropdownButtonFormField<String>(
-                      value: _day,
-                      decoration: const InputDecoration(labelText: 'Hari / Day'),
-                      items: kHariList
-                          .map((d) => DropdownMenuItem(value: d, child: Text(d)))
-                          .toList(),
-                      onChanged: (v) => setState(() => _day = v ?? _day),
-                    ),
-                  ),
-                  _wrapField(
-                    width: 160,
-                    child: OutlinedButton.icon(
-                      onPressed: () => _pickTime(isStart: true),
-                      icon: const Icon(Icons.access_time, size: 18),
-                      label: Text('Mula: ${_start.format(context)}'),
-                    ),
-                  ),
-                  _wrapField(
-                    width: 160,
-                    child: OutlinedButton.icon(
-                      onPressed: () => _pickTime(isStart: false),
-                      icon: const Icon(Icons.access_time_filled, size: 18),
-                      label: Text('Tamat: ${_end.format(context)}'),
-                    ),
-                  ),
-                  _wrapField(
-                    width: 220,
-                    child: DropdownButtonFormField<int>(
-                      value: _roomId,
-                      decoration: const InputDecoration(labelText: 'Bilik / Room'),
-                      hint: const Text('Pilih bilik'),
-                      items: _rooms
-                          .map((r) => DropdownMenuItem(value: r.id, child: Text(r.roomName)))
-                          .toList(),
-                      onChanged: (v) => setState(() => _roomId = v),
-                    ),
-                  ),
-                  _wrapField(
-                    width: 180,
-                    child: TextFormField(
-                      controller: _sessionCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Sesi / Session',
-                        hintText: 'JAN-JUN 2026',
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Align(
-                alignment: Alignment.centerRight,
-                child: ElevatedButton.icon(
-                  onPressed: _saving ? null : _submit,
-                  icon: _saving
-                      ? const SizedBox(
-                          height: 16,
-                          width: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Icon(Icons.save),
-                  label: Text(_saving ? 'Menyimpan...' : 'Simpan Entri'),
-                ),
-              ),
-            ],
+  // ─── FILTERS ────────────────────────────────────────────────────────────────
+
+  Widget _buildFilters() {
+    return Container(
+      color: AppTheme.slate,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+      child: Column(
+        children: [
+          // Search
+          TextField(
+            decoration: InputDecoration(
+              hintText: 'Cari subjek, pensyarah, bilik, kelas...',
+              prefixIcon: const Icon(Icons.search, size: 18),
+              contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+              filled: true, fillColor: Colors.white,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: AppTheme.slateBorder)),
+            ),
+            onChanged: (v) => setState(() => _searchQuery = v),
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _wrapField({required double width, required Widget child}) {
-    return SizedBox(width: width, child: child);
-  }
-
-  // ─── LIST HEADER ───────────────────────────────────────────
-
-  Widget _buildListHeader() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Senarai Jadual / Timetable List',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppTheme.navy),
-        ),
-        const SizedBox(height: 4),
-        // Hint for lecturers
-        const Text(
-          'Ketuk baris jadual untuk ambil kehadiran / Tap a row to take attendance',
-          style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          decoration: const InputDecoration(
-            hintText: 'Cari subjek, pensyarah, bilik, kelas...',
-            prefixIcon: Icon(Icons.search),
-          ),
-          onChanged: (v) => setState(() => _searchQuery = v),
-        ),
-        const SizedBox(height: 8),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              const Text('Hari: ', style: TextStyle(fontSize: 13, color: AppTheme.textMuted)),
-              FilterChip(
-                label: const Text('Semua'),
-                selected: _filterDay == null,
-                onSelected: (_) => setState(() => _filterDay = null),
-                selectedColor: AppTheme.teal.withOpacity(0.2),
-              ),
-              const SizedBox(width: 6),
-              ...kHariList.map((d) => Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: FilterChip(
-                      label: Text(d),
-                      selected: _filterDay == d,
-                      onSelected: (_) =>
-                          setState(() => _filterDay = _filterDay == d ? null : d),
-                      selectedColor: AppTheme.teal.withOpacity(0.2),
-                    ),
-                  )),
-            ],
-          ),
-        ),
-        const SizedBox(height: 4),
-        if (_kelasList.isNotEmpty)
+          const SizedBox(height: 6),
+          // Day + Kelas chips
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                const Text('Kelas: ', style: TextStyle(fontSize: 13, color: AppTheme.textMuted)),
-                FilterChip(
-                  label: const Text('Semua'),
-                  selected: _filterKelas == null,
-                  onSelected: (_) => setState(() => _filterKelas = null),
-                  selectedColor: AppTheme.teal.withOpacity(0.2),
-                ),
-                const SizedBox(width: 6),
-                ..._kelasList.map((k) => Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: FilterChip(
-                        label: Text(k),
-                        selected: _filterKelas == k,
-                        onSelected: (_) =>
-                            setState(() => _filterKelas = _filterKelas == k ? null : k),
-                        selectedColor: AppTheme.teal.withOpacity(0.2),
-                      ),
-                    )),
+                _fChip('Semua Hari', _filterDay == null, () => setState(() => _filterDay = null)),
+                ...kHariList.map((d) => _fChip(d, _filterDay == d,
+                    () => setState(() => _filterDay = _filterDay == d ? null : d),
+                    color: kDayColors[d])),
+                const SizedBox(width: 12),
+                if (_kelasList.isNotEmpty) ...[
+                  _fChip('Semua Kelas', _filterKelas == null, () => setState(() => _filterKelas = null)),
+                  ..._kelasList.map((k) => _fChip(k, _filterKelas == k,
+                      () => setState(() => _filterKelas = _filterKelas == k ? null : k))),
+                ],
               ],
             ),
           ),
-      ],
+        ],
+      ),
     );
   }
 
-  // ─── LIST TABLE ────────────────────────────────────────────
-
-  Widget _buildList(bool canWrite) {
-    final filtered = _filteredEntries;
-
-    if (filtered.isEmpty) {
-      return const Card(
-        child: Padding(
-          padding: EdgeInsets.all(32),
-          child: Center(
-            child: Text(
-              'Tiada entri jadual. / No timetable entries found.',
-              style: TextStyle(color: AppTheme.textMuted),
+  Widget _fChip(String label, bool selected, VoidCallback onTap, {Color? color}) {
+    final c = color ?? AppTheme.teal;
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: selected ? c : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: selected ? c : AppTheme.slateBorder),
+          ),
+          child: Text(label,
+            style: TextStyle(
+              fontSize: 12, fontWeight: FontWeight.w600,
+              color: selected ? Colors.white : AppTheme.textMuted,
             ),
           ),
         ),
-      );
+      ),
+    );
+  }
+
+  // ─── WEEKLY GRID VIEW ───────────────────────────────────────────────────────
+
+  Widget _buildWeeklyGrid() {
+    // Group entries by day
+    final byDay = <String, List<TimetableEntry>>{};
+    for (final d in kHariList) {
+      byDay[d] = _filtered.where((e) => e.day == d).toList()
+        ..sort((a, b) => a.startTime.compareTo(b.startTime));
     }
 
-    return Card(
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          headingTextStyle: const TextStyle(fontWeight: FontWeight.w700, color: AppTheme.navy),
-          dataRowMinHeight: 52,
-          dataRowMaxHeight: 60,
-          // Make entire row tappable → opens AttendanceScreen
-          columns: const [
-            DataColumn(label: Text('Kod / Code')),
-            DataColumn(label: Text('Nama Subjek / Subject')),
-            DataColumn(label: Text('Kelas')),
-            DataColumn(label: Text('Unit')),
-            DataColumn(label: Text('Pensyarah / Lecturer')),
-            DataColumn(label: Text('Hari / Day')),
-            DataColumn(label: Text('Masa / Time')),
-            DataColumn(label: Text('Bilik / Room')),
-            DataColumn(label: Text('Sesi / Session')),
-            DataColumn(label: Text('')),
-          ],
-          rows: filtered.map((e) {
-            return DataRow(
-              // ── TAP ROW → OPEN ATTENDANCE ──
-              onSelectChanged: (_) => _openAttendance(e),
-              cells: [
-                DataCell(Text(e.subjectCode,
-                    style: const TextStyle(fontWeight: FontWeight.w600))),
-                DataCell(
-                  Row(
+    final now = DateTime.now();
+    final todayMalay = {1:'Isnin',2:'Selasa',3:'Rabu',4:'Khamis',5:'Jumaat'}[now.weekday] ?? '';
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: kHariList.map((day) {
+          final classes = byDay[day] ?? [];
+          final isToday = day == todayMalay;
+          final dayColor = kDayColors[day] ?? AppTheme.navy;
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isToday ? dayColor : AppTheme.slateBorder,
+                width: isToday ? 2 : 1,
+              ),
+              boxShadow: isToday ? [
+                BoxShadow(color: dayColor.withOpacity(0.15), blurRadius: 8, offset: const Offset(0, 2))
+              ] : [],
+            ),
+            child: Column(
+              children: [
+                // ── Day header ──
+                Container(
+                  decoration: BoxDecoration(
+                    color: dayColor,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  child: Row(
                     children: [
-                      Text(e.subjectName),
-                      const SizedBox(width: 6),
-                      const Icon(Icons.chevron_right, size: 16, color: AppTheme.textMuted),
+                      Text(day,
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14)),
+                      if (isToday) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.25),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Text('HARI INI', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
+                        ),
+                      ],
+                      const Spacer(),
+                      Text('${classes.length} kelas',
+                          style: const TextStyle(color: Colors.white70, fontSize: 12)),
                     ],
                   ),
                 ),
-                DataCell(_kelasBadge(e.kelas ?? '-')),
-                DataCell(_unitBadge(e.departmentUnit)),
-                DataCell(Text(e.lecturerName ?? '-')),
-                DataCell(Text(e.day)),
-                DataCell(Text(e.timeSlot)),
-                DataCell(Text(e.roomName ?? '-')),
-                DataCell(Text(e.session ?? '-')),
-                DataCell(
-                  canWrite
-                      ? IconButton(
-                          tooltip: 'Padam / Delete',
-                          icon: const Icon(Icons.delete_outline, color: AppTheme.tidakHadir),
-                          onPressed: () => _confirmDelete(e),
-                        )
-                      : const SizedBox.shrink(),
-                ),
+                // ── Classes for this day ──
+                if (classes.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(children: [
+                      Icon(Icons.event_busy, color: dayColor.withOpacity(0.3), size: 18),
+                      const SizedBox(width: 8),
+                      Text('Tiada kelas', style: TextStyle(color: dayColor.withOpacity(0.5), fontSize: 13)),
+                    ]),
+                  )
+                else
+                  ...classes.asMap().entries.map((entry) {
+                    final i = entry.key;
+                    final e = entry.value;
+                    final isLast = i == classes.length - 1;
+                    return _buildGridRow(e, dayColor, isLast);
+                  }),
               ],
-            );
-          }).toList(),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildGridRow(TimetableEntry e, Color dayColor, bool isLast) {
+    final user     = context.read<UserProvider>().profile;
+    final canWrite = user?.role == 'Admin' ||
+                     user?.role == 'Ketua Jabatan' ||
+                     user?.role == 'Ketua Program';
+    final unitColor = _unitColor(e.departmentUnit);
+
+    return InkWell(
+      onTap: () => _openAttendance(e),
+      child: Container(
+        decoration: BoxDecoration(
+          border: isLast ? null : const Border(bottom: BorderSide(color: AppTheme.slateBorder)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            // Time column
+            SizedBox(
+              width: 80,
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(e.startTime.substring(0, 5),
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: dayColor)),
+                Text(e.endTime.substring(0, 5),
+                    style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+              ]),
+            ),
+            // Colour stripe
+            Container(width: 3, height: 44, color: unitColor,
+                margin: const EdgeInsets.symmetric(horizontal: 10)),
+            // Subject info
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Text(e.subjectCode,
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: unitColor)),
+                  const SizedBox(width: 6),
+                  _pill(e.kelas ?? e.departmentUnit, unitColor),
+                ]),
+                const SizedBox(height: 2),
+                Text(e.subjectName,
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textDark)),
+                const SizedBox(height: 3),
+                Row(children: [
+                  const Icon(Icons.person_outline, size: 12, color: AppTheme.textMuted),
+                  const SizedBox(width: 4),
+                  Text(e.lecturerName ?? '-', style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+                  const SizedBox(width: 10),
+                  const Icon(Icons.meeting_room_outlined, size: 12, color: AppTheme.textMuted),
+                  const SizedBox(width: 4),
+                  Text(e.roomName ?? '-', style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+                ]),
+              ]),
+            ),
+            // Actions
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              // Attendance button
+              IconButton(
+                tooltip: 'Ambil Kehadiran',
+                icon: const Icon(Icons.checklist_rtl, size: 20),
+                color: AppTheme.teal,
+                onPressed: () => _openAttendance(e),
+              ),
+              if (canWrite)
+                IconButton(
+                  tooltip: 'Padam',
+                  icon: const Icon(Icons.delete_outline, size: 20),
+                  color: AppTheme.tidakHadir,
+                  onPressed: () => _confirmDelete(e),
+                ),
+            ]),
+          ],
         ),
       ),
     );
   }
 
-  Widget _unitBadge(String unit) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: AppTheme.teal.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(unit,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.tealDark)),
+  // ─── CARD LIST VIEW ─────────────────────────────────────────────────────────
+
+  Widget _buildCardList(bool canWrite) {
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: _filtered.length,
+      itemBuilder: (_, i) => _buildEntryCard(_filtered[i], canWrite),
     );
   }
 
-  Widget _kelasBadge(String kelas) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: AppTheme.navy.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(6),
+  Widget _buildEntryCard(TimetableEntry e, bool canWrite) {
+    final dayColor  = kDayColors[e.day] ?? AppTheme.navy;
+    final unitColor = _unitColor(e.departmentUnit);
+    final now       = DateTime.now();
+    final isOngoing = e.isCurrentlyOngoing(now);
+    final isToday   = e.isUpcomingToday(now) || isOngoing;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: isOngoing ? AppTheme.teal : AppTheme.slateBorder,
+            width: isOngoing ? 2 : 1),
       ),
-      child: Text(kelas,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.navy)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _openAttendance(e),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              // Day pill
+              Container(
+                width: 56,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: dayColor.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: dayColor.withOpacity(0.3)),
+                ),
+                child: Column(children: [
+                  Text(e.day.substring(0, 2),
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: dayColor)),
+                  const SizedBox(height: 4),
+                  Text(e.startTime.substring(0, 5),
+                      style: TextStyle(fontSize: 10, color: dayColor)),
+                  Text(e.endTime.substring(0, 5),
+                      style: const TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                ]),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    Text(e.subjectCode,
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: unitColor)),
+                    const SizedBox(width: 6),
+                    _pill(e.kelas ?? e.departmentUnit, unitColor),
+                    if (isOngoing) ...[
+                      const SizedBox(width: 6),
+                      _pill('Sedang Berlangsung', AppTheme.teal),
+                    ],
+                  ]),
+                  const SizedBox(height: 3),
+                  Text(e.subjectName,
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textDark)),
+                  const SizedBox(height: 6),
+                  Wrap(spacing: 12, children: [
+                    _iconInfo(Icons.person_outline,       e.lecturerName ?? '-'),
+                    _iconInfo(Icons.meeting_room_outlined, e.roomName     ?? '-'),
+                    _iconInfo(Icons.calendar_today_outlined, e.session   ?? '-'),
+                  ]),
+                ]),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                children: [
+                  IconButton(
+                    tooltip: 'Ambil Kehadiran',
+                    icon: const Icon(Icons.checklist_rtl),
+                    color: AppTheme.teal,
+                    onPressed: () => _openAttendance(e),
+                  ),
+                  if (canWrite)
+                    IconButton(
+                      tooltip: 'Padam',
+                      icon: const Icon(Icons.delete_outline),
+                      color: AppTheme.tidakHadir,
+                      onPressed: () => _confirmDelete(e),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
+
+  Widget _pill(String text, Color color) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+    decoration: BoxDecoration(
+      color: color.withOpacity(0.12),
+      borderRadius: BorderRadius.circular(6),
+    ),
+    child: Text(text, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+  );
+
+  Widget _iconInfo(IconData icon, String text) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(icon, size: 12, color: AppTheme.textMuted),
+      const SizedBox(width: 3),
+      Text(text, style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+    ],
+  );
+
+  // ─── EMPTY ──────────────────────────────────────────────────────────────────
+
+  Widget _buildEmpty() => Center(
+    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+      Icon(Icons.calendar_today, size: 64, color: AppTheme.slateBorder),
+      const SizedBox(height: 16),
+      const Text('Tiada entri jadual ditemui.',
+          style: TextStyle(fontSize: 16, color: AppTheme.textMuted)),
+      const SizedBox(height: 8),
+      const Text('Gunakan butang + untuk tambah kelas.',
+          style: TextStyle(fontSize: 13, color: AppTheme.textMuted)),
+    ]),
+  );
+
+  // ─── FORM CARD ──────────────────────────────────────────────────────────────
+
+  Widget _buildFormCard() {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.all(16),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              const Icon(Icons.add_circle_outline, color: AppTheme.teal),
+              const SizedBox(width: 8),
+              const Text('Tambah Entri Jadual',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: AppTheme.navy)),
+              const Spacer(),
+              TextButton(onPressed: () => setState(() => _showForm = false),
+                  child: const Text('Tutup')),
+            ]),
+            const Divider(),
+            const SizedBox(height: 8),
+            Wrap(spacing: 12, runSpacing: 12, children: [
+              _ff(200, TextFormField(controller: _codeCtrl,
+                  decoration: const InputDecoration(labelText: 'Kod Subjek'),
+                  validator: (v) => v!.trim().isEmpty ? 'Wajib diisi' : null)),
+              _ff(280, TextFormField(controller: _nameCtrl,
+                  decoration: const InputDecoration(labelText: 'Nama Subjek'),
+                  validator: (v) => v!.trim().isEmpty ? 'Wajib diisi' : null)),
+              _ff(150, DropdownButtonFormField<String>(
+                  value: _unit,
+                  decoration: const InputDecoration(labelText: 'Jabatan / Unit'),
+                  items: kJabatanList.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
+                  onChanged: (v) async {
+                    if (v == null) return;
+                    setState(() { _unit = v; _lecturerId = null; _kelas = null; });
+                    await Future.wait([_loadLecturers(), _loadKelas()]);
+                    setState(() {});
+                  })),
+              _ff(150, DropdownButtonFormField<String>(
+                  value: _kelas,
+                  decoration: const InputDecoration(labelText: 'Kelas'),
+                  hint: const Text('Pilih kelas'),
+                  items: _kelasList.map((k) => DropdownMenuItem(value: k, child: Text(k))).toList(),
+                  onChanged: (v) => setState(() => _kelas = v))),
+              _ff(250, DropdownButtonFormField<String>(
+                  value: _lecturerId,
+                  decoration: const InputDecoration(labelText: 'Pensyarah'),
+                  hint: const Text('Pilih pensyarah'),
+                  items: _lecturers.map((l) => DropdownMenuItem(value: l.id, child: Text(l.fullName))).toList(),
+                  onChanged: (v) => setState(() => _lecturerId = v))),
+              _ff(150, DropdownButtonFormField<String>(
+                  value: _day,
+                  decoration: const InputDecoration(labelText: 'Hari'),
+                  items: kHariList.map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
+                  onChanged: (v) => setState(() => _day = v ?? _day))),
+              _ff(160, OutlinedButton.icon(
+                  onPressed: () => _pickTime(isStart: true),
+                  icon: const Icon(Icons.access_time, size: 18),
+                  label: Text('Mula: ${_start.format(context)}'))),
+              _ff(160, OutlinedButton.icon(
+                  onPressed: () => _pickTime(isStart: false),
+                  icon: const Icon(Icons.access_time_filled, size: 18),
+                  label: Text('Tamat: ${_end.format(context)}'))),
+              _ff(220, DropdownButtonFormField<int>(
+                  value: _roomId,
+                  decoration: const InputDecoration(labelText: 'Bilik / Room'),
+                  hint: const Text('Pilih bilik'),
+                  items: _rooms.map((r) => DropdownMenuItem(value: r.id, child: Text(r.roomName))).toList(),
+                  onChanged: (v) => setState(() => _roomId = v))),
+              _ff(180, TextFormField(controller: _sessionCtrl,
+                  decoration: const InputDecoration(labelText: 'Sesi', hintText: 'JAN-JUN 2026'))),
+            ]),
+            const SizedBox(height: 16),
+            Align(
+              alignment: Alignment.centerRight,
+              child: ElevatedButton.icon(
+                onPressed: _saving ? null : _submit,
+                icon: _saving
+                    ? const SizedBox(height: 16, width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.save),
+                label: Text(_saving ? 'Menyimpan...' : 'Simpan Entri'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _ff(double w, Widget child) => SizedBox(width: w, child: child);
 }
