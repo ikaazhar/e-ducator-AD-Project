@@ -1,8 +1,10 @@
 // lib/screens/attendance_screen.dart
 //
 // Modul 1: Perekodan Kehadiran — Grid Mingguan M1–M18.
-// Menerima parameter [kelas] dari TimetableUploadScreen supaya
-// hanya pelajar dalam kelas berkenaan dipaparkan.
+// UI diubah suai mengikut kehendak rakan industri: grid boleh skrol mendatar,
+// setiap baris = satu pelajar, setiap kolum = satu minggu (M1–M18),
+// kolum terakhir = % Kehadiran auto-kira.
+// Logik Supabase dalam attendance_service.dart TIDAK diubah.
 import 'package:flutter/material.dart';
 
 import '../models/attendance_record.dart';
@@ -11,6 +13,11 @@ import '../services/attendance_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/attendance_row.dart';
 
+// ---------------------------------------------------------------------------
+// Helper: tarikh mula setiap minggu berdasarkan tarikh mula semester.
+// ---------------------------------------------------------------------------
+
+/// Kira tarikh mula Minggu [week] (1-indexed) daripada [semesterStart].
 String weekStartDate(String semesterStart, int week) {
   try {
     final parts = semesterStart.split('-');
@@ -26,15 +33,21 @@ String weekStartDate(String semesterStart, int week) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Widget Utama
+// ---------------------------------------------------------------------------
+
 class AttendanceScreen extends StatefulWidget {
-  final String  timetableId;
-  final String  subjectName;
-  final String  subjectCode;
-  final String  departmentUnit;
-  final String? kelas;         // ← NEW: filter students by class e.g. DGS4A
-  final String  attendanceDate; // semester start date YYYY-MM-DD
-  final String  userId;
-  final bool    initialReadOnly;
+  final String timetableId;
+  final String subjectName;
+  final String subjectCode;
+  final String departmentUnit;
+
+  /// Tarikh mula semester dalam format YYYY-MM-DD.
+  /// Digunakan sebagai asas pengiraan tarikh setiap minggu.
+  final String attendanceDate;
+  final String userId;
+  final bool initialReadOnly;
 
   const AttendanceScreen({
     super.key,
@@ -42,7 +55,6 @@ class AttendanceScreen extends StatefulWidget {
     required this.subjectName,
     required this.subjectCode,
     required this.departmentUnit,
-    this.kelas,
     required this.attendanceDate,
     required this.userId,
     this.initialReadOnly = false,
@@ -55,13 +67,19 @@ class AttendanceScreen extends StatefulWidget {
 class _AttendanceScreenState extends State<AttendanceScreen> {
   final _service = AttendanceService();
 
-  List<Student>                 _students      = [];
-  Map<String, Map<int, String?>> _weeklyData   = {};
-  Set<int>                      _submittedWeeks = {};
+  List<Student> _students = [];
 
-  bool _loading    = true;
+  /// weeklyData[studentId][minggu 1..18] = status / null
+  Map<String, Map<int, String?>> _weeklyData = {};
+
+  /// Minggu yang telah dihantar (baca sahaja).
+  Set<int> _submittedWeeks = {};
+
+  bool _loading = true;
   bool _submitting = false;
-  int  _activeWeek = 1;
+
+  /// Minggu aktif yang sedang dipaparkan / diedit.
+  int _activeWeek = 1;
 
   @override
   void initState() {
@@ -69,30 +87,34 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     _load();
   }
 
+  // -------------------------------------------------------------------------
+  // Muatkan data
+  // -------------------------------------------------------------------------
+
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      // ── Fetch students filtered by kelas ───────────────────────────────────
-      final students = await _service.fetchStudentsByUnit(
-        widget.departmentUnit,
-        kelas: widget.kelas, // only students in this specific class
-      );
+      final students =
+          await _service.fetchStudentsByUnit(widget.departmentUnit);
 
+      // Muat semua 18 minggu secara selari
       final results = await Future.wait(
         List.generate(kTotalMinggu, (i) {
           final w = i + 1;
           return _service.fetchExistingAttendance(
-            timetableId:    widget.timetableId,
+            timetableId: widget.timetableId,
             attendanceDate: weekStartDate(widget.attendanceDate, w),
           );
         }),
       );
 
-      final weeklyData     = <String, Map<int, String?>>{ for (final s in students) s.id: {} };
+      final weeklyData = <String, Map<int, String?>>{
+        for (final s in students) s.id: {},
+      };
       final submittedWeeks = <int>{};
 
       for (int i = 0; i < kTotalMinggu; i++) {
-        final w       = i + 1;
+        final w = i + 1;
         final existing = results[i];
         if (existing.isNotEmpty) {
           submittedWeeks.add(w);
@@ -102,16 +124,20 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         }
       }
 
+      // Tentukan minggu aktif: minggu terawal yang belum dihantar, atau M18.
       int activeWeek = kTotalMinggu;
       for (int w = 1; w <= kTotalMinggu; w++) {
-        if (!submittedWeeks.contains(w)) { activeWeek = w; break; }
+        if (!submittedWeeks.contains(w)) {
+          activeWeek = w;
+          break;
+        }
       }
 
       setState(() {
-        _students       = students;
-        _weeklyData     = weeklyData;
+        _students = students;
+        _weeklyData = weeklyData;
         _submittedWeeks = submittedWeeks;
-        _activeWeek     = activeWeek;
+        _activeWeek = activeWeek;
       });
     } catch (_) {
       if (mounted) {
@@ -124,6 +150,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Kira statistik
+  // -------------------------------------------------------------------------
+
   int get _hadirKiniCount {
     int count = 0;
     for (final s in _students) {
@@ -133,8 +163,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   }
 
   bool get _isActiveWeekSubmitted => _submittedWeeks.contains(_activeWeek);
-  bool get _allActiveWeekFilled   =>
+
+  bool get _allActiveWeekFilled =>
       _students.every((s) => _weeklyData[s.id]?[_activeWeek] != null);
+
+  // -------------------------------------------------------------------------
+  // Tindakan
+  // -------------------------------------------------------------------------
 
   void _onCellTapped(String studentId, int week, String status) {
     if (_submittedWeeks.contains(week)) return;
@@ -161,17 +196,21 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       final dateStr = weekStartDate(widget.attendanceDate, _activeWeek);
       final records = _students
           .map((s) => AttendanceRecord(
-                timetableId:      widget.timetableId,
-                studentId:        s.id,
-                attendanceDate:   dateStr,
+                timetableId: widget.timetableId,
+                studentId: s.id,
+                attendanceDate: dateStr,
                 attendanceStatus: _weeklyData[s.id]![_activeWeek]!,
-                markedBy:         widget.userId,
+                markedBy: widget.userId,
               ))
           .toList();
       await _service.submitAttendance(records);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Kehadiran Minggu $_activeWeek berjaya direkodkan!')),
+        SnackBar(
+          content: Text(
+            'Kehadiran Minggu $_activeWeek berjaya direkodkan!',
+          ),
+        ),
       );
       setState(() => _submittedWeeks.add(_activeWeek));
     } catch (_) {
@@ -185,19 +224,15 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Build
+  // -------------------------------------------------------------------------
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(widget.subjectName, style: const TextStyle(fontSize: 16)),
-            if (widget.kelas != null)
-              Text(widget.kelas!,
-                  style: const TextStyle(fontSize: 12, color: Colors.white70)),
-          ],
-        ),
+        title: Text(widget.subjectName),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           tooltip: 'Kembali ke Jadual',
@@ -210,16 +245,15 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           : Column(
               children: [
                 _HeaderCard(
-                  subjectName:    widget.subjectName,
-                  subjectCode:    widget.subjectCode,
-                  kelas:          widget.kelas,
-                  activeWeek:     _activeWeek,
-                  hadirCount:     _hadirKiniCount,
-                  totalStudents:  _students.length,
-                  isSubmitted:    _isActiveWeekSubmitted,
-                  totalWeeks:     kTotalMinggu,
+                  subjectName: widget.subjectName,
+                  subjectCode: widget.subjectCode,
+                  activeWeek: _activeWeek,
+                  hadirCount: _hadirKiniCount,
+                  totalStudents: _students.length,
+                  isSubmitted: _isActiveWeekSubmitted,
+                  totalWeeks: kTotalMinggu,
                   submittedWeeks: _submittedWeeks,
-                  onWeekChanged:  (w) => setState(() => _activeWeek = w),
+                  onWeekChanged: (w) => setState(() => _activeWeek = w),
                 ),
                 if (_isActiveWeekSubmitted) _lockedBanner(),
                 if (!_isActiveWeekSubmitted) _bulkBar(),
@@ -229,6 +263,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             ),
     );
   }
+
+  // -------------------------------------------------------------------------
+  // Badan grid boleh skrol mendatar
+  // -------------------------------------------------------------------------
 
   Widget _gridBody() {
     return SingleChildScrollView(
@@ -243,13 +281,14 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               final i = entry.key;
               final s = entry.value;
               return AttendanceRow(
-                rowNumber:    i + 1,
-                studentName:  s.fullName,
-                studentId:    s.studentId,
+                rowNumber: i + 1,
+                studentName: s.fullName,
+                studentId: s.studentId,
                 weeklyStatus: _weeklyData[s.id] ?? {},
                 submittedWeeks: _submittedWeeks,
-                activeWeek:   _activeWeek,
-                onCellTapped: (week, status) => _onCellTapped(s.id, week, status),
+                activeWeek: _activeWeek,
+                onCellTapped: (week, status) =>
+                    _onCellTapped(s.id, week, status),
               );
             }),
           ],
@@ -258,17 +297,29 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     );
   }
 
+  // -------------------------------------------------------------------------
+  // Widget sokongan
+  // -------------------------------------------------------------------------
+
   Widget _lockedBanner() {
     return Container(
       width: double.infinity,
-      color: AppTheme.teal.withOpacity(0.10),
+      color: AppTheme.teal.withValues(alpha: 0.10),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(children: [
-        const Icon(Icons.lock, color: AppTheme.tealDark, size: 18),
-        const SizedBox(width: 8),
-        Text('Minggu $_activeWeek Telah Dihantar — Rekod Dikunci',
-            style: const TextStyle(color: AppTheme.tealDark, fontWeight: FontWeight.w600, fontSize: 13)),
-      ]),
+      child: Row(
+        children: [
+          const Icon(Icons.lock, color: AppTheme.tealDark, size: 18),
+          const SizedBox(width: 8),
+          Text(
+            'Minggu $_activeWeek Telah Dihantar — Rekod Dikunci',
+            style: const TextStyle(
+              color: AppTheme.tealDark,
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -276,39 +327,60 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(children: [
-        const Icon(Icons.flash_on_rounded, color: AppTheme.teal, size: 18),
-        const SizedBox(width: 8),
-        const Text('Tindakan Pukal:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppTheme.textDark)),
-        const SizedBox(width: 12),
-        _bulkChip('Semua Hadir', AppTheme.hadir),
-        const SizedBox(width: 6),
-        _bulkChip('Semua X', AppTheme.tidakHadir),
-        const SizedBox(width: 6),
-        _bulkChip('Semua MC', AppTheme.mc),
-        const SizedBox(width: 6),
-        _bulkChip('Semua CK', AppTheme.ck),
-      ]),
+      child: Row(
+        children: [
+          const Icon(Icons.flash_on_rounded, color: AppTheme.teal, size: 18),
+          const SizedBox(width: 8),
+          const Text(
+            'Tindakan Pukal:',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+              color: AppTheme.textDark,
+            ),
+          ),
+          const SizedBox(width: 12),
+          _bulkChip('Semua Hadir', AppTheme.hadir),
+          const SizedBox(width: 6),
+          _bulkChip('Semua X', AppTheme.tidakHadir),
+          const SizedBox(width: 6),
+          _bulkChip('Semua MC', AppTheme.mc),
+          const SizedBox(width: 6),
+          _bulkChip('Semua CK', AppTheme.ck),
+        ],
+      ),
     );
   }
 
   Widget _bulkChip(String label, Color color) {
     String status;
-    if (label.contains('Hadir'))  status = 'Hadir';
-    else if (label.contains('X')) status = 'Tak Hadir';
-    else if (label.contains('MC'))status = 'MC';
-    else                          status = 'CK';
+    if (label.contains('Hadir')) {
+      status = 'Hadir';
+    } else if (label.contains('X')) {
+      status = 'Tak Hadir';
+    } else if (label.contains('MC')) {
+      status = 'MC';
+    } else {
+      status = 'CK';
+    }
     return InkWell(
       onTap: () => _applyBulkToActiveWeek(status),
       borderRadius: BorderRadius.circular(20),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.10),
+          color: color.withValues(alpha: 0.10),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withOpacity(0.4)),
+          border: Border.all(color: color.withValues(alpha: 0.4)),
         ),
-        child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color)),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
+        ),
       ),
     );
   }
@@ -318,44 +390,57 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.all(16),
-      child: Row(children: [
-        Expanded(
-          child: locked
-              ? OutlinedButton.icon(
-                  onPressed: null,
-                  icon: const Icon(Icons.lock),
-                  label: Text('Minggu $_activeWeek Telah Dikunci'))
-              : ElevatedButton.icon(
-                  onPressed: (_allActiveWeekFilled && !_submitting) ? _submit : null,
-                  icon: _submitting
-                      ? const SizedBox(height: 16, width: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.check_circle_outline),
-                  label: Text('Hantar Kehadiran — Minggu $_activeWeek')),
-        ),
-      ]),
+      child: Row(
+        children: [
+          Expanded(
+            child: locked
+                ? OutlinedButton.icon(
+                    onPressed: null,
+                    icon: const Icon(Icons.lock),
+                    label: Text('Minggu $_activeWeek Telah Dikunci'),
+                  )
+                : ElevatedButton.icon(
+                    onPressed:
+                        (_allActiveWeekFilled && !_submitting) ? _submit : null,
+                    icon: _submitting
+                        ? const SizedBox(
+                            height: 16,
+                            width: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.check_circle_outline),
+                    label: Text(
+                      'Hantar Kehadiran — Minggu $_activeWeek',
+                    ),
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-// ─── Header Card ──────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Kad pengepala dengan pemilih minggu
+// ---------------------------------------------------------------------------
 
 class _HeaderCard extends StatelessWidget {
-  final String   subjectName;
-  final String   subjectCode;
-  final String?  kelas;
-  final int      activeWeek;
-  final int      hadirCount;
-  final int      totalStudents;
-  final bool     isSubmitted;
-  final int      totalWeeks;
+  final String subjectName;
+  final String subjectCode;
+  final int activeWeek;
+  final int hadirCount;
+  final int totalStudents;
+  final bool isSubmitted;
+  final int totalWeeks;
   final Set<int> submittedWeeks;
   final ValueChanged<int> onWeekChanged;
 
   const _HeaderCard({
     required this.subjectName,
     required this.subjectCode,
-    this.kelas,
     required this.activeWeek,
     required this.hadirCount,
     required this.totalStudents,
@@ -373,78 +458,111 @@ class _HeaderCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(subjectName,
-                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppTheme.navy)),
-              const SizedBox(height: 2),
-              Row(children: [
-                Text(subjectCode, style: const TextStyle(fontSize: 13, color: AppTheme.textMuted)),
-                if (kelas != null) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: AppTheme.navy.withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(6),
+          // Nama & kod subjek
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      subjectName,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.navy,
+                      ),
                     ),
-                    child: Text(kelas!,
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.navy)),
-                  ),
-                ],
-              ]),
-            ])),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppTheme.teal.withOpacity(0.10),
-                borderRadius: BorderRadius.circular(8),
+                    const SizedBox(height: 2),
+                    Text(
+                      subjectCode,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppTheme.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              child: Text('Hadir: $hadirCount / $totalStudents',
-                  style: const TextStyle(color: AppTheme.tealDark, fontWeight: FontWeight.w700, fontSize: 13)),
-            ),
-          ]),
+              // Lencana kehadiran
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.teal.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'Hadir: $hadirCount / $totalStudents',
+                  style: const TextStyle(
+                    color: AppTheme.tealDark,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 12),
+          // Pemilih minggu
           SizedBox(
             height: 36,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               itemCount: totalWeeks,
               itemBuilder: (_, i) {
-                final w      = i + 1;
+                final w = i + 1;
                 final isActive = w == activeWeek;
-                final isDone   = submittedWeeks.contains(w);
+                final isDone = submittedWeeks.contains(w);
                 return GestureDetector(
                   onTap: () => onWeekChanged(w),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 150),
                     margin: const EdgeInsets.only(right: 6),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: isActive ? AppTheme.navy
-                          : isDone   ? AppTheme.teal.withOpacity(0.12)
-                                     : AppTheme.slate,
+                      color: isActive
+                          ? AppTheme.navy
+                          : isDone
+                              ? AppTheme.teal.withValues(alpha: 0.12)
+                              : AppTheme.slate,
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: isActive ? AppTheme.navy
-                            : isDone   ? AppTheme.teal.withOpacity(0.4)
-                                       : AppTheme.slateBorder,
+                        color: isActive
+                            ? AppTheme.navy
+                            : isDone
+                                ? AppTheme.teal.withValues(alpha: 0.4)
+                                : AppTheme.slateBorder,
                       ),
                     ),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      if (isDone) ...[
-                        Icon(Icons.check_circle, size: 12,
-                            color: isActive ? Colors.white : AppTheme.tealDark),
-                        const SizedBox(width: 4),
-                      ],
-                      Text('M$w',
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (isDone) ...[
+                          Icon(
+                            Icons.check_circle,
+                            size: 12,
+                            color: isActive
+                                ? Colors.white
+                                : AppTheme.tealDark,
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        Text(
+                          'M$w',
                           style: TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w700,
-                            color: isActive ? Colors.white
-                                : isDone   ? AppTheme.tealDark
-                                           : AppTheme.textMuted,
-                          )),
-                    ]),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: isActive
+                                ? Colors.white
+                                : isDone
+                                    ? AppTheme.tealDark
+                                    : AppTheme.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 );
               },
@@ -456,48 +574,88 @@ class _HeaderCard extends StatelessWidget {
   }
 }
 
-// ─── Grid Header ──────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Baris pengepala grid (Bil | Nama | M1…M18 | % Kehadiran)
+// ---------------------------------------------------------------------------
 
 class _GridHeader extends StatelessWidget {
   final int activeWeek;
+
   const _GridHeader({required this.activeWeek});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 44, color: AppTheme.navy,
-      child: Row(children: [
-        _hCell(kBilCellWidth,  'Bil'),
-        _hCell(kNamaCellWidth, 'Nama Pelajar', align: TextAlign.left),
-        for (int w = 1; w <= kTotalMinggu; w++) _weekCell(w, w == activeWeek),
-        _hCell(kPeratusWidth,  '% Hadir'),
-      ]),
+      height: 44,
+      color: AppTheme.navy,
+      child: Row(
+        children: [
+          _hCell(kBilCellWidth, 'Bil'),
+          _hCell(kNamaCellWidth, 'Nama Pelajar', align: TextAlign.left),
+          for (int w = 1; w <= kTotalMinggu; w++)
+            _weekHeaderCell(w, w == activeWeek),
+          _hCell(kPeratusWidth, '% Hadir'),
+        ],
+      ),
     );
   }
 
-  Widget _hCell(double w, String text, {TextAlign align = TextAlign.center}) {
+  Widget _hCell(double width, String text,
+      {TextAlign align = TextAlign.center}) {
     return Container(
-      width: w, height: 44,
+      width: width,
+      height: 44,
       padding: const EdgeInsets.symmetric(horizontal: 6),
-      alignment: align == TextAlign.left ? Alignment.centerLeft : Alignment.center,
+      alignment: align == TextAlign.left
+          ? Alignment.centerLeft
+          : Alignment.center,
       decoration: BoxDecoration(
-        border: Border(right: BorderSide(color: Colors.white.withOpacity(0.15), width: 0.5)),
+        border: Border(
+          right: BorderSide(
+            color: Colors.white.withValues(alpha: 0.15),
+            width: 0.5,
+          ),
+        ),
       ),
-      child: Text(text, textAlign: align,
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white)),
+      child: Text(
+        text,
+        textAlign: align,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+        ),
+      ),
     );
   }
 
-  Widget _weekCell(int week, bool isActive) {
+  Widget _weekHeaderCell(int week, bool isActive) {
     return Container(
-      width: kWeekCellWidth, height: 44,
+      width: kWeekCellWidth,
+      height: 44,
       decoration: BoxDecoration(
-        color: isActive ? AppTheme.teal.withOpacity(0.35) : Colors.transparent,
-        border: Border(right: BorderSide(color: Colors.white.withOpacity(0.15), width: 0.5)),
+        color: isActive
+            ? AppTheme.teal.withValues(alpha: 0.35)
+            : Colors.transparent,
+        border: Border(
+          right: BorderSide(
+            color: Colors.white.withValues(alpha: 0.15),
+            width: 0.5,
+          ),
+        ),
       ),
-      child: Center(child: Text('M$week',
-          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
-              color: isActive ? Colors.white : Colors.white.withOpacity(0.70)))),
+      child: Center(
+        child: Text(
+          'M$week',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: isActive
+                ? Colors.white
+                : Colors.white.withValues(alpha: 0.70),
+          ),
+        ),
+      ),
     );
   }
 }
