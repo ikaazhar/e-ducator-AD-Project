@@ -77,6 +77,7 @@ class EducatorApp extends StatelessWidget {
                 departmentUnit: args['departmentUnit'] as String,
                 attendanceDate: args['attendanceDate'] as String,
                 userId: args['userId'] as String,
+                kelas: args['kelas'] as String?,   
                 initialReadOnly: (args['isReadOnly'] as bool?) ?? false,
               ),
             );

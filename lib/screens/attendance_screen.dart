@@ -46,6 +46,7 @@ class AttendanceScreen extends StatefulWidget {
   /// Tarikh mula semester dalam format YYYY-MM-DD.
   /// Digunakan sebagai asas pengiraan tarikh setiap minggu.
   final String attendanceDate;
+  final String? kelas;
   final String userId;
   final bool initialReadOnly;
 
@@ -57,6 +58,7 @@ class AttendanceScreen extends StatefulWidget {
     required this.departmentUnit,
     required this.attendanceDate,
     required this.userId,
+    this.kelas,
     this.initialReadOnly = false,
   });
 
@@ -95,7 +97,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     setState(() => _loading = true);
     try {
       final students =
-          await _service.fetchStudentsByUnit(widget.departmentUnit);
+          await _service.fetchStudentsByUnit(widget.departmentUnit, kelas: widget.kelas,);
 
       // Muat semua 18 minggu secara selari
       final results = await Future.wait(
