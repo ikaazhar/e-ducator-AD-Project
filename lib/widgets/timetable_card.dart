@@ -71,7 +71,7 @@ class TimetableCard extends StatelessWidget {
       ),
       // Subtle teal tint when the class is ongoing
       color: isOngoing
-          ? AppTheme.teal.withOpacity(0.04)
+          ? AppTheme.teal.withValues (alpha: 0.04)
           : Colors.white,
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -112,7 +112,7 @@ class TimetableCard extends StatelessWidget {
             const SizedBox(height: 10),
 
             // ── Info rows ──
-            _infoRow(Icons.calendar_today_outlined, entry.day),
+            _infoRow(Icons.calendar_today_outlined, '${entry.day} - $dateLabel'),
             _infoRow(Icons.access_time_outlined, entry.timeSlot),
             if (entry.roomName != null)
               _infoRow(Icons.meeting_room_outlined, entry.roomName!),
