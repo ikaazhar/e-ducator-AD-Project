@@ -11,18 +11,22 @@ class AttendanceService {
   SupabaseClient get _client => Supabase.instance.client;
 
   /// Ambil senarai pelajar berdasarkan unit/program.
-  Future<List<Student>> fetchStudentsByUnit(String departmentUnit) async {
-    if (SupabaseConfig.isPlaceholder) return _mockStudents(departmentUnit);
+  Future<List<Student>> fetchStudentsByUnit(String departmentUnit, {String? kelas}) async {
+    if (SupabaseConfig.isPlaceholder) return _mockStudents(departmentUnit, kelas: kelas);
     try {
-      final data = await _client
+      var query = _client
           .from('students')
           .select()
           .eq('program_id', departmentUnit);
+      if (kelas != null && kelas.isNotEmpty) {
+        query = query.eq('kelas', kelas);
+      }
+      final data = await query.order('full_name');
       return (data as List)
           .map((row) => Student.fromJson(row as Map<String, dynamic>))
           .toList();
     } catch (_) {
-      return _mockStudents(departmentUnit);
+      return _mockStudents(departmentUnit, kelas: kelas);
     }
   }
 
@@ -34,7 +38,7 @@ class AttendanceService {
   }) async {
     if (SupabaseConfig.isPlaceholder) return {};
     try {
-      final data = await _client
+      var query = _client
           .from('attendance_records')
           .select()
           .eq('timetable_id', timetableId)
@@ -58,7 +62,7 @@ class AttendanceService {
   }
 
   // -------------------- Mock --------------------
-  List<Student> _mockStudents(String unit) {
+  List<Student> _mockStudents(String unit, {String? kelas}) {
     final names = [
       'Ahmad Bin Ali',
       'Siti Aishah Binti Hassan',
