@@ -4,6 +4,7 @@
 // - Admin: CRUD penuh semua unit.
 // - Ketua Program: CRUD untuk unit sendiri sahaja.
 // - Ketua Jabatan / Pensyarah: Lihat sahaja.
+// - Mengetuk baris jadual → buka AttendanceScreen untuk kelas berkenaan.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -11,6 +12,7 @@ import '../models/room.dart';
 import '../models/timetable_entry.dart';
 import '../models/user_profile.dart';
 import '../providers/user_provider.dart';
+import '../screens/attendance_screen.dart';
 import '../services/room_service.dart';
 import '../services/timetable_service.dart';
 import '../theme/app_theme.dart';
@@ -40,12 +42,12 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
   TimeOfDay _end = const TimeOfDay(hour: 10, minute: 0);
   int? _roomId;
   String? _lecturerId;
-  String? _kelas; // selected kelas from students table
+  String? _kelas;
 
   // Data
   List<Room> _rooms = const [];
   List<UserProfile> _lecturers = const [];
-  List<String> _kelasList = const []; // distinct kelas from students
+  List<String> _kelasList = const [];
   List<TimetableEntry> _entries = const [];
   TimetableStats _stats = const TimetableStats(
     totalClasses: 0,
@@ -101,10 +103,8 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
     _lecturers = await _service.fetchLecturersByUnit(_unit);
   }
 
-  /// Load distinct kelas values from students table for selected unit
   Future<void> _loadKelas() async {
     _kelasList = await _service.fetchKelasByUnit(_unit);
-    // Reset kelas selection if current value no longer valid
     if (_kelas != null && !_kelasList.contains(_kelas)) {
       _kelas = null;
     }
@@ -124,6 +124,37 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
     final user = context.read<UserProvider>().profile;
     if (user?.role == 'Ketua Program') return user?.departmentUnit;
     return null;
+  }
+
+  // ─── NAVIGATION TO ATTENDANCE ──────────────────────────────
+
+  /// Apabila pensyarah mengetuk baris jadual, buka skrin kehadiran
+  /// untuk kelas berkenaan dengan senarai pelajar yang betul.
+  void _openAttendance(TimetableEntry entry) {
+    final user = context.read<UserProvider>().profile;
+
+    // Only lecturers, Ketua Program, and Admin can take attendance
+    if (user == null) return;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AttendanceScreen(
+          timetableId: entry.id,
+          subjectName: entry.subjectName,
+          subjectCode: entry.subjectCode,
+          departmentUnit: entry.departmentUnit,
+          kelas: entry.kelas, // pass kelas so only correct students load
+          attendanceDate: _todayDateString(),
+          userId: user.id,
+        ),
+      ),
+    );
+  }
+
+  String _todayDateString() {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
   }
 
   // ─── FORM HELPERS ──────────────────────────────────────────
@@ -155,7 +186,6 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-
     if (_kelas == null) {
       _showSnack('Sila pilih kelas / Please select a class.', isError: true);
       return;
@@ -386,7 +416,6 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
                 spacing: 12,
                 runSpacing: 12,
                 children: [
-                  // Subject Code
                   _wrapField(
                     width: 200,
                     child: TextFormField(
@@ -395,7 +424,6 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
                       validator: (v) => (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null,
                     ),
                   ),
-                  // Subject Name
                   _wrapField(
                     width: 280,
                     child: TextFormField(
@@ -404,7 +432,6 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
                       validator: (v) => (v == null || v.trim().isEmpty) ? 'Wajib diisi' : null,
                     ),
                   ),
-                  // Unit / Jabatan
                   _wrapField(
                     width: 160,
                     child: DropdownButtonFormField<String>(
@@ -425,7 +452,6 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
                       },
                     ),
                   ),
-                  // Kelas — fetched from students table
                   _wrapField(
                     width: 160,
                     child: DropdownButtonFormField<String>(
@@ -438,7 +464,6 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
                       onChanged: (v) => setState(() => _kelas = v),
                     ),
                   ),
-                  // Lecturer — fetched from profiles
                   _wrapField(
                     width: 260,
                     child: DropdownButtonFormField<String>(
@@ -451,7 +476,6 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
                       onChanged: (v) => setState(() => _lecturerId = v),
                     ),
                   ),
-                  // Day
                   _wrapField(
                     width: 150,
                     child: DropdownButtonFormField<String>(
@@ -463,7 +487,6 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
                       onChanged: (v) => setState(() => _day = v ?? _day),
                     ),
                   ),
-                  // Start time
                   _wrapField(
                     width: 160,
                     child: OutlinedButton.icon(
@@ -472,7 +495,6 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
                       label: Text('Mula: ${_start.format(context)}'),
                     ),
                   ),
-                  // End time
                   _wrapField(
                     width: 160,
                     child: OutlinedButton.icon(
@@ -481,7 +503,6 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
                       label: Text('Tamat: ${_end.format(context)}'),
                     ),
                   ),
-                  // Room
                   _wrapField(
                     width: 220,
                     child: DropdownButtonFormField<int>(
@@ -494,7 +515,6 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
                       onChanged: (v) => setState(() => _roomId = v),
                     ),
                   ),
-                  // Session
                   _wrapField(
                     width: 180,
                     child: TextFormField(
@@ -543,8 +563,13 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
           'Senarai Jadual / Timetable List',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppTheme.navy),
         ),
+        const SizedBox(height: 4),
+        // Hint for lecturers
+        const Text(
+          'Ketuk baris jadual untuk ambil kehadiran / Tap a row to take attendance',
+          style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
+        ),
         const SizedBox(height: 10),
-        // Search bar
         TextField(
           decoration: const InputDecoration(
             hintText: 'Cari subjek, pensyarah, bilik, kelas...',
@@ -553,7 +578,6 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
           onChanged: (v) => setState(() => _searchQuery = v),
         ),
         const SizedBox(height: 8),
-        // Day filter chips
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
@@ -580,7 +604,6 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
           ),
         ),
         const SizedBox(height: 4),
-        // Kelas filter chips
         if (_kelasList.isNotEmpty)
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -635,8 +658,9 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
         scrollDirection: Axis.horizontal,
         child: DataTable(
           headingTextStyle: const TextStyle(fontWeight: FontWeight.w700, color: AppTheme.navy),
-          dataRowMinHeight: 48,
-          dataRowMaxHeight: 56,
+          dataRowMinHeight: 52,
+          dataRowMaxHeight: 60,
+          // Make entire row tappable → opens AttendanceScreen
           columns: const [
             DataColumn(label: Text('Kod / Code')),
             DataColumn(label: Text('Nama Subjek / Subject')),
@@ -650,27 +674,39 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen> {
             DataColumn(label: Text('')),
           ],
           rows: filtered.map((e) {
-            return DataRow(cells: [
-              DataCell(Text(e.subjectCode,
-                  style: const TextStyle(fontWeight: FontWeight.w600))),
-              DataCell(Text(e.subjectName)),
-              DataCell(_kelasBadge(e.kelas ?? '-')),
-              DataCell(_unitBadge(e.departmentUnit)),
-              DataCell(Text(e.lecturerName ?? '-')),
-              DataCell(Text(e.day)),
-              DataCell(Text(e.timeSlot)),
-              DataCell(Text(e.roomName ?? '-')),
-              DataCell(Text(e.session ?? '-')),
-              DataCell(
-                canWrite
-                    ? IconButton(
-                        tooltip: 'Padam / Delete',
-                        icon: const Icon(Icons.delete_outline, color: AppTheme.tidakHadir),
-                        onPressed: () => _confirmDelete(e),
-                      )
-                    : const SizedBox.shrink(),
-              ),
-            ]);
+            return DataRow(
+              // ── TAP ROW → OPEN ATTENDANCE ──
+              onSelectChanged: (_) => _openAttendance(e),
+              cells: [
+                DataCell(Text(e.subjectCode,
+                    style: const TextStyle(fontWeight: FontWeight.w600))),
+                DataCell(
+                  Row(
+                    children: [
+                      Text(e.subjectName),
+                      const SizedBox(width: 6),
+                      const Icon(Icons.chevron_right, size: 16, color: AppTheme.textMuted),
+                    ],
+                  ),
+                ),
+                DataCell(_kelasBadge(e.kelas ?? '-')),
+                DataCell(_unitBadge(e.departmentUnit)),
+                DataCell(Text(e.lecturerName ?? '-')),
+                DataCell(Text(e.day)),
+                DataCell(Text(e.timeSlot)),
+                DataCell(Text(e.roomName ?? '-')),
+                DataCell(Text(e.session ?? '-')),
+                DataCell(
+                  canWrite
+                      ? IconButton(
+                          tooltip: 'Padam / Delete',
+                          icon: const Icon(Icons.delete_outline, color: AppTheme.tidakHadir),
+                          onPressed: () => _confirmDelete(e),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ],
+            );
           }).toList(),
         ),
       ),
