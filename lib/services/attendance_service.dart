@@ -38,7 +38,7 @@ class AttendanceService {
   }) async {
     if (SupabaseConfig.isPlaceholder) return {};
     try {
-      var query = _client
+      final data = await _client
           .from('attendance_records')
           .select()
           .eq('timetable_id', timetableId)
