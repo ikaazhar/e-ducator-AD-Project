@@ -183,18 +183,13 @@ class _SidebarContent extends StatelessWidget {
           route: '/timetable',
           icon: Icons.calendar_month,
           label: 'Jadual Waktu',
-          allowedRoles: [
-            'Lecturer',
-            'Ketua Program',
-            'Ketua Jabatan',
-            'Admin',
-          ],
+          allowedRoles: ['Lecturer'],
         ),
         _NavItem(
           route: '/timetable-upload',
           icon: Icons.upload_file,
           label: 'Muat Naik Jadual',
-          allowedRoles: ['Admin', 'Ketua Program'],
+          allowedRoles: ['Admin', 'Ketua Program', 'Ketua Jabatan'],
         ),
         _NavItem(
           route: '/discipline',
@@ -261,7 +256,10 @@ class _SidebarContent extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.school, color: Colors.white, size: 32),
+                Image.asset(
+                  'assets/images/ikm_logo.png',
+                  height: 36,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -314,14 +312,14 @@ class _SidebarContent extends StatelessWidget {
                             Icon(
                               item.icon,
                               size: 18,
-                              color: active ? Colors.white : Colors.white60,
+                              color: active ? AppTheme.navy : Colors.white60,
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
                                 item.label,
                                 style: TextStyle(
-                                  color: active ? Colors.white : Colors.white60,
+                                  color: active ? AppTheme.navy : Colors.white60,
                                   fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                                   fontSize: 13,
                                 ),

@@ -55,6 +55,7 @@ class _DisciplineListScreenState extends State<DisciplineListScreen> {
       floatingActionButton: canCreate
           ? FloatingActionButton.extended(
               backgroundColor: AppTheme.teal,
+              foregroundColor: AppTheme.navy,
               onPressed: () async {
                 final ok = await Navigator.pushNamed(context, '/discipline-form');
                 if (ok == true) _refresh();

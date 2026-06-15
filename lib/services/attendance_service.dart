@@ -11,25 +11,16 @@ class AttendanceService {
   SupabaseClient get _client => Supabase.instance.client;
 
   /// Ambil senarai pelajar berdasarkan unit/program.
-  /// Jika [kelas] diberikan, tapis mengikut kelas tertentu (e.g. DGS4A).
-  /// Ini memastikan setiap entri jadual hanya menunjukkan pelajar kelas berkenaan.
-  Future<List<Student>> fetchStudentsByUnit(
-    String departmentUnit, {
-    String? kelas,
-  }) async {
+  Future<List<Student>> fetchStudentsByUnit(String departmentUnit, {String? kelas}) async {
     if (SupabaseConfig.isPlaceholder) return _mockStudents(departmentUnit, kelas: kelas);
     try {
       var query = _client
           .from('students')
           .select()
           .eq('program_id', departmentUnit);
-
-      // Filter by kelas if provided — so each timetable entry shows
-      // only the students belonging to that specific class
       if (kelas != null && kelas.isNotEmpty) {
         query = query.eq('kelas', kelas);
       }
-
       final data = await query.order('full_name');
       return (data as List)
           .map((row) => Student.fromJson(row as Map<String, dynamic>))
