@@ -214,6 +214,80 @@ class ReportingService {
     }
   }
 
+  Future<Map<String, Map<String, dynamic>>> fetchWarningLetterActions(
+    List<AttendanceSummary> summaries,
+  ) async {
+    try {
+      final studentIds = summaries
+          .map((summary) => summary.studentId)
+          .where((id) => id.trim().isNotEmpty)
+          .toSet()
+          .toList();
+      if (studentIds.isEmpty) return {};
+
+      final data = await _client
+          .from('warning_letter_actions')
+          .select()
+          .inFilter('student_id', studentIds);
+      if (data == null) return {};
+
+      final actions = <String, Map<String, dynamic>>{};
+      for (final row in (data as List).cast<Map<String, dynamic>>()) {
+        final studentId = row['student_id']?.toString();
+        if (studentId == null || studentId.isEmpty) continue;
+        actions[studentId] = row;
+      }
+      return actions;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<Map<String, dynamic>> markWarningLetterSent({
+    required AttendanceSummary summary,
+    required UserProfile user,
+    String? notes,
+  }) async {
+    final existing = await _client
+        .from('warning_letter_actions')
+        .select('id')
+        .eq('student_id', summary.studentId)
+        .maybeSingle();
+
+    final payload = <String, dynamic>{
+      'student_id': summary.studentId,
+      'student_name': summary.studentName,
+      'class_id': summary.classId,
+      'attendance_percent':
+          double.parse(summary.attendancePercent.toStringAsFixed(2)),
+      'total_absences': summary.totalAbsences,
+      'status': 'sent',
+      'sent_at': DateTime.now().toUtc().toIso8601String(),
+      'sent_by_user_id': user.id,
+      'sent_by_name': user.fullName,
+      'sent_by_role': user.role,
+      'notes': notes == null || notes.trim().isEmpty ? null : notes.trim(),
+    };
+
+    final Map<String, dynamic>? saved;
+    if (existing == null) {
+      saved = await _client
+          .from('warning_letter_actions')
+          .insert(payload)
+          .select()
+          .single();
+    } else {
+      saved = await _client
+          .from('warning_letter_actions')
+          .update(payload)
+          .eq('id', existing['id'])
+          .select()
+          .single();
+    }
+
+    return saved ?? payload;
+  }
+
   Future<void> generateWarningEscalations(List<AttendanceSummary> summaries) async {
     try {
       final payload = <Map<String, dynamic>>[];

@@ -30,6 +30,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
   List<AttendanceSummary> _summaries = [];
   List<Map<String, dynamic>> _sessionTrend = [];
   List<Map<String, dynamic>> _availableClasses = [];
+  Map<String, Map<String, dynamic>> _warningLetterActions = {};
   List<String> _sessionOptions = [];
   List<String> _sectionOptions = [];
   bool _loading = true;
@@ -703,51 +704,161 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
                 ),
               )
             else
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  headingRowColor:
-                      const MaterialStatePropertyAll(AppTheme.slate),
-                  columns: const [
-                    DataColumn(label: Text('Nama Pelajar')),
-                    DataColumn(label: Text('ID Pelajar')),
-                    DataColumn(label: Text('Kelas')),
-                    DataColumn(label: Text('Kehadiran %')),
-                    DataColumn(label: Text('Jumlah Tak Hadir')),
-                    DataColumn(label: Text('Tahap Amaran')),
-                    DataColumn(label: Text('Surat Amaran')),
-                  ],
-                  rows: criticalList.asMap().entries.map((entry) {
-                    final summary = entry.value;
-                    final pctColor = summary.attendancePercent >= 60
-                        ? AppTheme.mc
-                        : AppTheme.tidakHadir;
-                    return DataRow(cells: [
-                      DataCell(Text(
-                        '${entry.key + 1}. ${summary.studentName}',
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      )),
-                      DataCell(Text(
-                        summary.studentId,
-                        style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-                      )),
-                      DataCell(Text(summary.classId)),
-                      DataCell(Text(
-                        '${summary.attendancePercent.toStringAsFixed(1)}%',
-                        style: TextStyle(color: pctColor, fontWeight: FontWeight.w700),
-                      )),
-                      DataCell(Text('${summary.totalAbsences}')),
-                      DataCell(_warningLevelBadge(summary.warningLevel)),
-                      DataCell(TextButton(
-                        onPressed: () => _previewLetter(context, summary),
-                        child: const Text('Pratonton'),
-                      )),
-                    ]);
-                  }).toList(),
-                ),
-              ),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  return SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                      child: DataTable(
+                        headingRowColor:
+                            const MaterialStatePropertyAll(AppTheme.slate),
+                        dataRowMinHeight: 56,
+                        dataRowMaxHeight: 72,
+                        columns: const [
+                          DataColumn(label: Text('Nama Pelajar')),
+                          DataColumn(label: Text('ID Pelajar')),
+                          DataColumn(label: Text('Kelas')),
+                          DataColumn(label: Center(child: Text('Kehadiran %'))),
+                          DataColumn(label: Center(child: Text('Jumlah Tak Hadir'))),
+                          DataColumn(label: Center(child: Text('Tahap Amaran'))),
+                          DataColumn(label: Text('Status Surat Amaran')),
+                        ],
+                        rows: criticalList.asMap().entries.map((entry) {
+                          final summary = entry.value;
+                          final pctColor = summary.attendancePercent >= 60
+                              ? AppTheme.mc
+                              : AppTheme.tidakHadir;
+                          return DataRow(cells: [
+                            DataCell(Text(
+                              '${entry.key + 1}. ${summary.studentName}',
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                            )),
+                            DataCell(Text(
+                              summary.studentId,
+                              style: const TextStyle(
+                                fontFamily: 'monospace',
+                                fontSize: 12,
+                              ),
+                            )),
+                            DataCell(Text(summary.classId)),
+                            DataCell(Center(
+                              child: Text(
+                                '${summary.attendancePercent.toStringAsFixed(1)}%',
+                                style: TextStyle(
+                                  color: pctColor,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            )),
+                            DataCell(Center(child: Text('${summary.totalAbsences}'))),
+                            DataCell(Center(
+                              child: _warningLevelBadge(summary.warningLevel),
+                            )),
+                            DataCell(_warningLetterStatusCell(summary)),
+                          ]);
+                        }).toList(),
+                      ),
+                    ),
+                  );
+                },
+              ), 
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _warningLetterStatusCell(AttendanceSummary summary) {
+    final action = _warningLetterActions[summary.studentId];
+    final status = action?['status']?.toString();
+    final isSent = status == 'sent';
+    final user = context.watch<UserProvider>().profile;
+    final canMarkSent = user?.role == 'Ketua Program';
+
+    if (isSent) {
+      return _sentWarningLetterStatus(action);
+    }
+
+    if (canMarkSent) {
+      return OutlinedButton.icon(
+        icon: const Icon(Icons.check_circle_outline, size: 16),
+        label: const Text('Tanda Telah Dihantar'),
+        onPressed: () => _confirmWarningLetterSent(summary),
+      );
+    }
+
+    return _statusChip(
+      label: 'Belum Dihantar',
+      color: AppTheme.textMuted,
+      icon: Icons.schedule,
+    );
+  }
+
+  Widget _sentWarningLetterStatus(Map<String, dynamic>? action) {
+    final sentBy = action?['sent_by_name']?.toString().trim();
+    final sentAt = DateTime.tryParse(action?['sent_at']?.toString() ?? '');
+    final dateLabel =
+        sentAt == null ? null : DateFormat('d MMM yyyy', 'ms').format(sentAt.toLocal());
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 170, maxWidth: 230),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _statusChip(
+            label: 'Telah Dihantar',
+            color: AppTheme.hadir,
+            icon: Icons.verified,
+          ),
+          if ((sentBy != null && sentBy.isNotEmpty) || dateLabel != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                [
+                  if (sentBy != null && sentBy.isNotEmpty) 'oleh $sentBy',
+                  if (dateLabel != null) dateLabel,
+                ].join(' • '),
+                style: const TextStyle(
+                  color: AppTheme.textMuted,
+                  fontSize: 11,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusChip({
+    required String label,
+    required Color color,
+    required IconData icon,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.35)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -778,94 +889,98 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
     );
   }
 
-  void _previewLetter(BuildContext context, AttendanceSummary summary) {
-    showDialog(
+  Future<void> _confirmWarningLetterSent(AttendanceSummary summary) async {
+    final user = context.read<UserProvider>().profile;
+    if (user == null || user.role != 'Ketua Program') return;
+
+    final notesController = TextEditingController();
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
           title: const Text(
-            'Surat Amaran Kehadiran',
+            'Sahkan Surat Amaran',
             style: TextStyle(fontWeight: FontWeight.w700, color: AppTheme.navy),
           ),
           contentPadding: const EdgeInsets.all(24),
           content: SizedBox(
             width: 480,
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'SURAT AMARAN KEHADIRAN',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.navy,
-                      fontSize: 15,
-                    ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Adakah surat amaran rasmi telah dihantar kepada pelajar ini?',
+                  style: TextStyle(fontSize: 13, height: 1.5),
+                ),
+                const SizedBox(height: 12),
+                _letterRow('Nama Pelajar', summary.studentName),
+                _letterRow('ID Pelajar', summary.studentId),
+                _letterRow('Kelas', summary.classId),
+                _letterRow(
+                  'Kehadiran',
+                  '${summary.attendancePercent.toStringAsFixed(1)}%',
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: notesController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Catatan (pilihan)',
+                    alignLabelWithHint: true,
                   ),
-                  const Divider(),
-                  const SizedBox(height: 8),
-                  _letterRow('Kepada', summary.studentName),
-                  _letterRow('ID Pelajar', summary.studentId),
-                  _letterRow('Kelas', summary.classId),
-                  _letterRow(
-                    'Tarikh',
-                    DateFormat('d MMMM yyyy', 'ms').format(DateTime.now()),
-                  ),
-                  const Divider(),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Dengan hormatnya perkara di atas dirujuk.',
-                    style: TextStyle(fontSize: 13),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'Adalah dimaklumkan bahawa kehadiran anda ke sesi pembelajaran bagi kelas ${summary.classId} adalah sebanyak ${summary.attendancePercent.toStringAsFixed(1)}%, iaitu di bawah had minimum yang ditetapkan iaitu 80%.',
-                    style: const TextStyle(fontSize: 13, height: 1.6),
-                  ),
-                  const SizedBox(height: 10),
-                  _letterRow('Jumlah Ketidakhadiran', '${summary.totalAbsences} sesi'),
-                  _letterRow('Tahap Amaran', 'Level ${summary.warningLevel}'),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Anda dikehendaki mengambil tindakan segera bagi memperbaiki kehadiran anda. Kegagalan berbuat demikian boleh menjejaskan kelayakan anda untuk menduduki peperiksaan akhir semester.',
-                    style: TextStyle(fontSize: 13, height: 1.6),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('Sekian, terima kasih.', style: TextStyle(fontSize: 13)),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Pihak Pengurusan Akademik',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                  ),
-                  const Text('IKM Johor Bahru', style: TextStyle(fontSize: 13)),
-                  const Divider(),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Tutup'),
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Batal'),
             ),
             ElevatedButton.icon(
-              icon: const Icon(Icons.picture_as_pdf),
-              label: const Text('Jana PDF'),
+              icon: const Icon(Icons.check),
+              label: const Text('Sahkan'),
               style: ElevatedButton.styleFrom(backgroundColor: AppTheme.navy),
-              onPressed: () {
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('PDF surat amaran dijana (stub).'),
-                    backgroundColor: AppTheme.navy,
-                  ),
-                );
-              },
+              onPressed: () => Navigator.of(context).pop(true),
             ),
           ],
         );
       },
     );
+
+    if (confirmed != true) {
+      notesController.dispose();
+      return;
+    }
+
+    try {
+      final saved = await _service.markWarningLetterSent(
+        summary: summary,
+        user: user,
+        notes: notesController.text,
+      );
+      notesController.dispose();
+      if (!mounted) return;
+      setState(() {
+        _warningLetterActions[summary.studentId] = saved;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Status surat amaran telah dikemaskini.'),
+          backgroundColor: AppTheme.navy,
+        ),
+      );
+    } catch (error) {
+      notesController.dispose();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal mengemaskini status surat amaran: $error'),
+          backgroundColor: AppTheme.tidakHadir,
+        ),
+      );
+    }
   }
 
   Padding _letterRow(String label, String value) {
@@ -916,6 +1031,9 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
       dateFrom: _dateParam(_dateFrom),
       dateTo: _dateParam(_dateTo),
     );
+    final warningLetterActions = await _service.fetchWarningLetterActions(
+      summaries.where((summary) => summary.attendancePercent < 80).toList(),
+    );
     final sessionTrend = await _service.fetchRawSessionTrend(
       user,
       timetableId: _selectedTimetableId,
@@ -931,6 +1049,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
       _sessionOptions = sessions;
       _sectionOptions = sections;
       _summaries = summaries;
+      _warningLetterActions = warningLetterActions;
       _sessionTrend = sessionTrend;
       _loading = false;
     });
@@ -957,6 +1076,9 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
       dateFrom: _dateParam(_dateFrom),
       dateTo: _dateParam(_dateTo),
     );
+    final warningLetterActions = await _service.fetchWarningLetterActions(
+      summaries.where((summary) => summary.attendancePercent < 80).toList(),
+    );
     final sessionTrend = await _service.fetchRawSessionTrend(
       user,
       timetableId: _selectedTimetableId,
@@ -969,6 +1091,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
     if (!mounted) return;
     setState(() {
       _summaries = summaries;
+      _warningLetterActions = warningLetterActions;
       _sessionTrend = sessionTrend;
       _reloading = false;
     });
