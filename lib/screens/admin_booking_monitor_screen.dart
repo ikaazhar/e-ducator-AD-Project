@@ -1,12 +1,13 @@
 // lib/screens/admin_booking_monitor_screen.dart
-//
-// Skrin Pentadbir: Memantau dan menapis semua tempahan sistem.
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart'; // NEW
 
 import '../models/booking.dart';
 import '../models/room.dart';
+import '../providers/user_provider.dart'; // NEW
 import '../services/room_service.dart';
+import '../services/notification_service.dart'; // NEW
 import '../theme/app_theme.dart';
 import '../widgets/app_scaffold.dart';
 
@@ -19,11 +20,12 @@ class AdminBookingMonitorScreen extends StatefulWidget {
 
 class _AdminBookingMonitorScreenState extends State<AdminBookingMonitorScreen> {
   final _service = RoomService();
-  
+  final _notifService = NotificationService(); // NEW
+
   List<Booking> _allBookings = [];
   List<Booking> _filteredBookings = [];
   List<Room> _rooms = [];
-  
+
   bool _loading = true;
   DateTime? _filterDate;
   int? _selectedRoomId;
@@ -38,7 +40,7 @@ class _AdminBookingMonitorScreenState extends State<AdminBookingMonitorScreen> {
     setState(() => _loading = true);
     _allBookings = await _service.fetchAllBookingsGlobal();
     _rooms = await _service.fetchAllRooms();
-    _filteredBookings = _allBookings;
+    _applyFilters(); // CHANGED: re-apply current filters instead of overwrite
     if (mounted) setState(() => _loading = false);
   }
 
@@ -58,6 +60,17 @@ class _AdminBookingMonitorScreenState extends State<AdminBookingMonitorScreen> {
 
         return matchesDate && matchesRoom;
       }).toList();
+
+      // NEW: sort so active/upcoming bookings show first, past/cancelled last
+      _filteredBookings.sort((a, b) {
+        if (a.isCancelled != b.isCancelled) {
+          return a.isCancelled ? 1 : -1;
+        }
+        if (a.isPast != b.isPast) {
+          return a.isPast ? 1 : -1;
+        }
+        return b.bookingDate.compareTo(a.bookingDate);
+      });
     });
   }
 
@@ -65,8 +78,65 @@ class _AdminBookingMonitorScreenState extends State<AdminBookingMonitorScreen> {
     setState(() {
       _filterDate = null;
       _selectedRoomId = null;
-      _filteredBookings = _allBookings;
     });
+    _applyFilters();
+  }
+
+  // NEW: cancel booking flow
+  Future<void> _cancelBooking(Booking booking, Room room) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Batalkan Tempahan'),
+        content: Text(
+          'Adakah anda pasti ingin membatalkan tempahan ${room.roomName} '
+          'pada ${booking.bookingDate}?\n\nPemohon akan dimaklumkan.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Tidak')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red, foregroundColor: Colors.white),
+            child: const Text('Ya, Batalkan'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || booking.id == null) return;
+
+    final adminId = context.read<UserProvider>().profile?.id ?? '';
+
+    try {
+      await _service.cancelBooking(
+        bookingId: booking.id!,
+        cancelledBy: adminId,
+      );
+
+      await _notifService.notifyBookingCancelled(
+        recipientId: booking.userId,
+        roomName: room.roomName,
+        bookingDate: booking.bookingDate,
+        bookingId: booking.id!,
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tempahan dibatalkan. Pemohon telah dimaklumkan.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      await _bootstrap();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ralat: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   @override
@@ -164,16 +234,89 @@ class _AdminBookingMonitorScreenState extends State<AdminBookingMonitorScreen> {
         separatorBuilder: (_, __) => const Divider(height: 1),
         itemBuilder: (context, index) {
           final b = _filteredBookings[index];
-          
-          // Cross reference room names from the room list array safely
-          final roomObj = _rooms.firstWhere((r) => r.id == b.roomId, 
+
+          final roomObj = _rooms.firstWhere((r) => r.id == b.roomId,
               orElse: () => Room(id: b.roomId, roomName: 'Bilik ID: ${b.roomId}', status: ''));
 
+          // NEW: visual states
+          final isPast = b.isPast;
+          final isCancelled = b.isCancelled;
+          final dimmed = isPast || isCancelled;
+
+          final titleColor = dimmed ? Colors.grey.shade500 : AppTheme.navy;
+          final subtitleColor = dimmed ? Colors.grey.shade400 : AppTheme.textMuted;
+
           return ListTile(
-            leading: const Icon(Icons.bookmark_outline, color: AppTheme.navy),
-            title: Text(roomObj.roomName, style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text('Tarikh: ${b.bookingDate} | Masa: ${b.startTime.substring(0,5)} - ${b.endTime.substring(0,5)}'),
-            trailing: Text(b.purpose ?? '-', style: const TextStyle(color: AppTheme.textMuted)),
+            leading: Icon(
+              isCancelled
+                  ? Icons.cancel_outlined
+                  : Icons.bookmark_outline,
+              color: isCancelled
+                  ? Colors.red.shade300
+                  : (dimmed ? Colors.grey.shade400 : AppTheme.navy),
+            ),
+            title: Row(
+              children: [
+                Text(
+                  roomObj.roomName,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: titleColor,
+                    decoration: isCancelled
+                        ? TextDecoration.lineThrough
+                        : TextDecoration.none,
+                  ),
+                ),
+                if (isCancelled) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    child: Text(
+                      'Dibatalkan',
+                      style: TextStyle(fontSize: 10, color: Colors.red.shade600, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ] else if (isPast) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      'Selesai',
+                      style: TextStyle(fontSize: 10, color: Colors.grey.shade500, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            subtitle: Text(
+              'Tarikh: ${b.bookingDate} | Masa: ${b.startTime.substring(0, 5)} - ${b.endTime.substring(0, 5)}',
+              style: TextStyle(color: subtitleColor),
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(b.purpose ?? '-',
+                    style: TextStyle(color: subtitleColor)),
+                // NEW: cancel button — only for active, non-past bookings
+                if (!isCancelled && !isPast) ...[
+                  const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: 'Batalkan Tempahan',
+                    icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                    onPressed: () => _cancelBooking(b, roomObj),
+                  ),
+                ],
+              ],
+            ),
           );
         },
       ),

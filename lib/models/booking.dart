@@ -1,15 +1,13 @@
-// lib/models/booking.dart
-//
-// Model tempahan bilik. Memetakan jadual `public.bookings`.
 class Booking {
   final String? id;
   final int roomId;
   final String? roomName;
   final String userId;
-  final String bookingDate; // 'YYYY-MM-DD'
+  final String bookingDate;
   final String startTime;
   final String endTime;
   final String? purpose;
+  final String status; // NEW: 'active' | 'cancelled'
   final DateTime? createdAt;
 
   const Booking({
@@ -21,6 +19,7 @@ class Booking {
     required this.startTime,
     required this.endTime,
     this.purpose,
+    this.status = 'active', // NEW
     this.createdAt,
   });
 
@@ -37,6 +36,7 @@ class Booking {
       startTime: json['start_time'].toString(),
       endTime: json['end_time'].toString(),
       purpose: json['purpose'] as String?,
+      status: json['status'] as String? ?? 'active', // NEW
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString())
           : null,
@@ -51,4 +51,15 @@ class Booking {
         'end_time': endTime,
         'purpose': purpose,
       };
+
+  // NEW: helper to check if booking date has passed
+  bool get isPast {
+    final date = DateTime.tryParse(bookingDate);
+    if (date == null) return false;
+    final today = DateTime.now();
+    final todayDateOnly = DateTime(today.year, today.month, today.day);
+    return date.isBefore(todayDateOnly);
+  }
+
+  bool get isCancelled => status == 'cancelled'; // NEW
 }

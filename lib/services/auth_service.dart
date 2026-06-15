@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
 import '../models/user_profile.dart';
+import 'notification_service.dart';
 
 /// Akaun telah dinyahaktifkan oleh admin.
 class AccountDeactivatedException implements Exception {
@@ -84,6 +85,9 @@ class AuthService {
       await _client.auth.signOut();
       throw AccountDeactivatedException();
     }
+
+    // NEW: check for booking reminders (fire-and-forget, non-blocking)
+    NotificationService().checkAndCreateBookingReminders(user.id);
 
     return profile;
   }

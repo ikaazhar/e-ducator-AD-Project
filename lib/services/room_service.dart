@@ -23,6 +23,19 @@ class RoomService {
     }
   }
 
+  /// Batalkan tempahan (Admin only) — sets status='cancelled'.
+  Future<void> cancelBooking({
+    required String bookingId,
+    required String cancelledBy,
+  }) async {
+    if (SupabaseConfig.isPlaceholder) return;
+    await _client.from('bookings').update({
+      'status': 'cancelled',
+      'cancelled_by': cancelledBy,
+      'cancelled_at': DateTime.now().toIso8601String(),
+    }).eq('id', bookingId);
+  }
+
   /// Ambil bilik yang status = 'Available'.
   Future<List<Room>> fetchAvailableRooms() async {
     if (SupabaseConfig.isPlaceholder) {
@@ -98,7 +111,7 @@ class RoomService {
     try {
       final data = await _client
           .from('bookings')
-          .select()
+          .select('*, rooms(room_name)')
           .order('booking_date', ascending: false);
       return (data as List)
           .map((row) => Booking.fromJson(row as Map<String, dynamic>))
