@@ -183,18 +183,13 @@ class _SidebarContent extends StatelessWidget {
           route: '/timetable',
           icon: Icons.calendar_month,
           label: 'Jadual Waktu',
-          allowedRoles: [
-            'Lecturer',
-            'Ketua Program',
-            'Ketua Jabatan',
-            'Admin',
-          ],
+          allowedRoles: ['Lecturer'],
         ),
         _NavItem(
           route: '/timetable-upload',
           icon: Icons.upload_file,
           label: 'Muat Naik Jadual',
-          allowedRoles: ['Admin', 'Ketua Program'],
+          allowedRoles: ['Admin', 'Ketua Program', 'Ketua Jabatan'],
         ),
         _NavItem(
           route: '/discipline',
