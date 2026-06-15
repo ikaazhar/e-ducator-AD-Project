@@ -152,6 +152,7 @@ class _AdminRoomScreenState extends State<AdminRoomScreen> {
       title: 'Urus Bilik',
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: AppTheme.teal,
+        foregroundColor: AppTheme.navy,
         onPressed: _addDialog,
         icon: const Icon(Icons.add),
         label: const Text('Tambah Bilik'),

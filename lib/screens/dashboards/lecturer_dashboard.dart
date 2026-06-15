@@ -271,7 +271,7 @@ class _LecturerDashboardScreenState extends State<LecturerDashboardScreen> {
           label: const Text('Ambil Kehadiran'),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppTheme.teal,
-            foregroundColor: Colors.white,
+            foregroundColor: AppTheme.navy,
           ),
         ),
       ],

@@ -304,7 +304,7 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen>
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),
-      backgroundColor: isError ? AppTheme.tidakHadir : AppTheme.teal,
+      backgroundColor: isError ? AppTheme.tidakHadir : AppTheme.navy,
     ));
   }
 
@@ -378,7 +378,7 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen>
       width: double.infinity,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [AppTheme.navy, Color(0xFF134074)],
+          colors: [AppTheme.navy, AppTheme.navyDark],
           begin: Alignment.topLeft, end: Alignment.bottomRight,
         ),
       ),

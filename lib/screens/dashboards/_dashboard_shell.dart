@@ -221,7 +221,7 @@ class DashSectionHeader extends StatelessWidget {
           TextButton(
             onPressed: onAction,
             style: TextButton.styleFrom(
-              foregroundColor: AppTheme.teal,
+              foregroundColor: AppTheme.navy,
               textStyle: const TextStyle(fontSize: 13),
             ),
             child: Text(actionLabel!),

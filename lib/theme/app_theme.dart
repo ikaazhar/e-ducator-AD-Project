@@ -1,35 +1,45 @@
 // lib/theme/app_theme.dart
 //
-// Tema rasmi aplikasi E-ducator.
-// Warna utama: Navy Blue. Warna aksen: Teal. Latar: Putih / Slate-gray.
+// Tema rasmi aplikasi E-ducator — TVET MARA Visual Identity.
+// Warna utama: TVET MARA Blue (#004C97). Aksen: Bright Yellow (#FFCD00).
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static const Color navy = Color(0xFF0B2545);
-  static const Color navyDark = Color(0xFF071A33);
-  static const Color teal = Color(0xFF0FB5A6);
-  static const Color tealDark = Color(0xFF0A8F84);
-  static const Color slate = Color(0xFFF4F6F8);
-  static const Color slateBorder = Color(0xFFE2E8F0);
-  static const Color textDark = Color(0xFF1E293B);
+  // ── Primary brand colours ──────────────────────────────────────────────────
+  static const Color navy     = Color(0xFF004C97); // TVET MARA Blue
+  static const Color navyDark = Color(0xFF003570); // darker shade for sidebar/hover
+
+  // ── Accent colour (replaces teal) ─────────────────────────────────────────
+  static const Color teal     = Color(0xFFFFCD00); // Bright Yellow (buttons, active)
+  static const Color tealDark = Color(0xFFE6B800); // darker yellow for pressed state
+
+  // ── Neutral surfaces ───────────────────────────────────────────────────────
+  static const Color slate       = Color(0xFFF4F6F8); // page background
+  static const Color slateBorder = Color(0xFFE2E8F0); // card/divider borders
+
+  // ── Text colours ──────────────────────────────────────────────────────────
+  static const Color textDark  = Color(0xFF1E293B);
   static const Color textMuted = Color(0xFF64748B);
 
-  static const Color hadir = Color(0xFF16A34A);
-  static const Color tidakHadir = Color(0xFFDC2626);
-  static const Color mc = Color(0xFFF59E0B);
-  static const Color ck = Color(0xFFEA580C);
+  // ── Attendance status colours (unchanged) ─────────────────────────────────
+  static const Color hadir      = Color(0xFF16A34A); // present  – green
+  static const Color tidakHadir = Color(0xFFDC2626); // absent   – red
+  static const Color mc         = Color(0xFFF59E0B); // MC       – amber
+  static const Color ck         = Color(0xFFEA580C); // CK       – orange
 
-  static const Color severityRendah = Color(0xFF0FB5A6);
+  // ── Discipline severity colours (unchanged) ───────────────────────────────
+  static const Color severityRendah    = Color(0xFF0FB5A6);
   static const Color severitySederhana = Color(0xFFF59E0B);
-  static const Color severityTinggi = Color(0xFFDC2626);
+  static const Color severityTinggi    = Color(0xFFDC2626);
 
+  // ── Light theme ───────────────────────────────────────────────────────────
   static ThemeData light() {
     final base = ThemeData.light(useMaterial3: true);
     return base.copyWith(
       colorScheme: ColorScheme.fromSeed(
         seedColor: navy,
         primary: navy,
-        secondary: teal,
+        secondary: teal,       // yellow accent
         surface: Colors.white,
       ),
       scaffoldBackgroundColor: slate,
@@ -49,8 +59,8 @@ class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: teal,
-          foregroundColor: Colors.white,
+          backgroundColor: teal,            // Yellow buttons
+          foregroundColor: Color(0xFF1E293B), // dark text on yellow
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           textStyle: const TextStyle(fontWeight: FontWeight.w600),
@@ -78,7 +88,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: teal, width: 1.5),
+          borderSide: const BorderSide(color: navy, width: 1.5), // blue focus ring
         ),
       ),
       dividerTheme: const DividerThemeData(color: slateBorder, thickness: 1),

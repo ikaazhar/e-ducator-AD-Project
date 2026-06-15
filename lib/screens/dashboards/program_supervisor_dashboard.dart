@@ -189,7 +189,7 @@ class _ProgramSupervisorDashboardScreenState
           label: const Text('Muat Naik Jadual'),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppTheme.teal,
-            foregroundColor: Colors.white,
+            foregroundColor: AppTheme.navy,
           ),
         ),
       ],
