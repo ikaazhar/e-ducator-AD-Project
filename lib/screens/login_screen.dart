@@ -78,7 +78,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.school, size: 56, color: AppTheme.navy),
+                      Image.asset(
+                        'assets/images/ikm_logo.png',
+                        height: 72,
+                      ),
                       const SizedBox(height: 12),
                       const Text(
                         'E-ducator',
