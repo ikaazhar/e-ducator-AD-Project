@@ -256,7 +256,10 @@ class _SidebarContent extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.school, color: Colors.white, size: 32),
+                Image.asset(
+                  'assets/images/ikm_logo.png',
+                  height: 36,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
