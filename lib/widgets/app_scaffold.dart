@@ -309,14 +309,14 @@ class _SidebarContent extends StatelessWidget {
                             Icon(
                               item.icon,
                               size: 18,
-                              color: active ? Colors.white : Colors.white60,
+                              color: active ? AppTheme.navy : Colors.white60,
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
                                 item.label,
                                 style: TextStyle(
-                                  color: active ? Colors.white : Colors.white60,
+                                  color: active ? AppTheme.navy : Colors.white60,
                                   fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                                   fontSize: 13,
                                 ),
