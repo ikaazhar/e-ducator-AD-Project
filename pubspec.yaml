@@ -17,6 +17,7 @@ dependencies:
   fl_chart: ^0.68.0
   pdf: ^3.12.0
   printing: ^5.14.3
+  google_fonts: ^6.2.1
 
 dev_dependencies:
   flutter_test:
