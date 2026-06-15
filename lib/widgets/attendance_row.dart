@@ -161,7 +161,7 @@ class AttendanceRow extends StatelessWidget {
 
     // Highlight kolum aktif dengan latar sedikit berbeza
     final bgColor = isActive && !hasValue
-        ? AppTheme.teal.withValues(alpha: 0.08)
+        ? AppTheme.teal.withValues(alpha: 0.15)
         : Colors.white;
 
     return GestureDetector(

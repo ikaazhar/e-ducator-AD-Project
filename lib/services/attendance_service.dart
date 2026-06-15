@@ -75,13 +75,14 @@ class AttendanceService {
       'Aiman Bin Yusof',
       'Nur Adila Binti Zainal',
     ];
+    final effectiveKelas = kelas ?? '${unit}4A';
     return List.generate(names.length, (i) {
       return Student(
         id: 'stu-${unit.toLowerCase()}-${i + 1}',
         fullName: names[i],
         studentId: '${unit}24${(1000 + i)}',
         programId: unit,
-        kelas: '${unit}4A',
+        kelas: effectiveKelas,
       );
     });
   }

@@ -73,6 +73,7 @@ class _TimetableScreenState extends State<TimetableScreen>
         'subjectCode': e.subjectCode,
         'departmentUnit': e.departmentUnit,
         'attendanceDate': today,
+        'kelas': e.kelas,  
         'isReadOnly': readOnly,
         'userId': user.id,
       },
