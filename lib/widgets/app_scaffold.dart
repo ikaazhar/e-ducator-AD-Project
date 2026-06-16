@@ -12,6 +12,8 @@ import '../services/auth_service.dart';
 import '../services/reporting_service.dart';
 import '../theme/app_theme.dart';
 import '../models/user_profile.dart';
+import '../services/notification_service.dart'; // NEW
+import '../models/app_notification.dart'; // NEW
 
 class AppScaffold extends StatelessWidget {
   final String title;
@@ -389,6 +391,7 @@ class _NotificationBellState extends State<_NotificationBell> {
   List<Map<String, dynamic>> _notifications = [];
   int _unreadCount = 0;
   final _reportingService = ReportingService();
+  final _notifService = NotificationService(); // NEW
 
   @override
   void initState() {
@@ -406,20 +409,50 @@ class _NotificationBellState extends State<_NotificationBell> {
       return;
     }
 
-    final notifications =
-        await _reportingService.fetchWarningNotifications(widget.user!);
+    final all = await _fetchNotifications();
     if (!mounted) return;
     setState(() {
-      _notifications = notifications;
+      _notifications = all;
       _computeUnread();
     });
   }
 
-  Future<List<Map<String, dynamic>>> _fetchNotifications() async {
-    if (widget.user == null) return [];
-    return _reportingService.fetchWarningNotifications(widget.user!);
-  }
+Future<List<Map<String, dynamic>>> _fetchNotifications() async {
+  if (widget.user == null) return [];
 
+  // Fetch attendance warning notifications (by role)
+  final warningNotifs =
+      await _reportingService.fetchWarningNotifications(widget.user!);
+
+  // NEW: Fetch booking notifications (by user id)
+  List<Map<String, dynamic>> bookingNotifs = [];
+  try {
+    final appNotifs =
+        await _notifService.fetchForUser(widget.user!.id);
+    bookingNotifs = appNotifs.map((n) => {
+      'id': n.id,
+      'message': n.message,
+      'is_read': n.isRead,
+      'created_at': n.createdAt?.toIso8601String(),
+      'warning_level': 0,               // no level for booking notifs
+      'notification_type': n.notificationType,
+      'related_booking_id': n.relatedBookingId,
+      'recipient_id': n.recipientId,
+    }).toList();
+  } catch (_) {}
+
+  // Merge and sort by created_at descending
+  final all = [...warningNotifs, ...bookingNotifs];
+  all.sort((a, b) {
+    final dateA = DateTime.tryParse(a['created_at']?.toString() ?? '') ??
+        DateTime.fromMillisecondsSinceEpoch(0);
+    final dateB = DateTime.tryParse(b['created_at']?.toString() ?? '') ??
+        DateTime.fromMillisecondsSinceEpoch(0);
+    return dateB.compareTo(dateA);
+  });
+
+  return all;
+}
   void _computeUnread() {
     _unreadCount =
         _notifications.where((item) => !_isRead(item['is_read'])).length;
@@ -572,15 +605,60 @@ class _NotificationBellState extends State<_NotificationBell> {
   Widget _buildNotificationRow(Map<String, dynamic> notification) {
     final isRead = _isRead(notification['is_read']);
     final level = notification['warning_level'] as int? ?? 0;
-    final badgeColor =
-        level == 3 ? AppTheme.tidakHadir : level == 2 ? AppTheme.ck : AppTheme.mc;
+    final notifType = notification['notification_type']?.toString() ?? '';
+
+    // Determine if this is a booking notification
+    final isBookingNotif = notifType.startsWith('booking_');
+
+    // Icon and color based on type
+    Color badgeColor;
+    IconData badgeIcon;
+    String title;
+
+    if (isBookingNotif) {
+      switch (notifType) {
+        case 'booking_cancelled':
+          badgeColor = Colors.red;
+          badgeIcon = Icons.cancel_outlined;
+          title = 'Tempahan Dibatalkan';
+          break;
+        case 'booking_reminder_today':
+          badgeColor = AppTheme.teal;
+          badgeIcon = Icons.today;
+          title = 'Peringatan Hari Ini';
+          break;
+        case 'booking_reminder_tomorrow':
+          badgeColor = Colors.blue;
+          badgeIcon = Icons.event_outlined;
+          title = 'Peringatan Esok';
+          break;
+        default:
+          badgeColor = Colors.grey;
+          badgeIcon = Icons.info_outline;
+          title = 'Notifikasi Tempahan';
+      }
+    } else {
+      badgeColor = level == 3
+          ? AppTheme.tidakHadir
+          : level == 2
+              ? AppTheme.ck
+              : AppTheme.mc;
+      badgeIcon = level == 3
+          ? Icons.error
+          : level == 2
+              ? Icons.warning
+              : Icons.info_outline;
+      title = level > 0 ? 'Amaran Tahap $level' : 'Notifikasi';
+    }
+
     final createdAt = notification['created_at']?.toString();
     final parsedDate = DateTime.tryParse(createdAt ?? '');
     final formattedDate = parsedDate == null
         ? ''
         : DateFormat('d MMM yyyy', 'ms').format(parsedDate);
-    final message = _notificationMessage(notification);
-    final title = level > 0 ? 'Amaran Tahap $level' : 'Notifikasi Amaran';
+    final message = isBookingNotif
+        ? (notification['message']?.toString() ?? '')
+        : _notificationMessage(notification);
 
     return InkWell(
       onTap: () => _onNotificationTap(notification),
@@ -591,19 +669,12 @@ class _NotificationBellState extends State<_NotificationBell> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: badgeColor,
-                borderRadius: BorderRadius.circular(20),
+                color: badgeColor.withOpacity(0.15),
+                shape: BoxShape.circle,
               ),
-              child: Text(
-                'L$level',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+              child: Icon(badgeIcon, color: badgeColor, size: 14),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -630,8 +701,8 @@ class _NotificationBellState extends State<_NotificationBell> {
                   const SizedBox(height: 4),
                   Text(
                     formattedDate,
-                    style:
-                        const TextStyle(color: AppTheme.textMuted, fontSize: 11),
+                    style: const TextStyle(
+                        color: AppTheme.textMuted, fontSize: 11),
                   ),
                 ],
               ),
@@ -654,25 +725,29 @@ class _NotificationBellState extends State<_NotificationBell> {
 
   Future<void> _onNotificationTap(Map<String, dynamic> notification) async {
     final id = notification['id'];
+    final notifType = notification['notification_type']?.toString() ?? '';
+    final isBookingNotif = notifType.startsWith('booking_');
+
+    // Optimistic local update
     if (mounted) {
       final index = _notifications.indexWhere((item) => item['id'] == id);
       if (index != -1) {
         setState(() {
           _notifications[index] = {..._notifications[index], 'is_read': true};
-          notification['is_read'] = true;
           _computeUnread();
         });
       }
-    } else {
-      notification['is_read'] = true;
     }
 
-    var persistedRead = true;
     try {
       if (id != null) {
-        await _reportingService.markNotificationRead(id);
+        if (isBookingNotif) {
+          // NEW: mark via NotificationService for booking notifs
+          await _notifService.markAsRead(id.toString());
+        } else {
+          await _reportingService.markNotificationRead(id);
+        }
         final latest = await _fetchNotifications();
-        persistedRead = _isNotificationReadIn(latest, id);
         if (mounted) {
           setState(() {
             _notifications = latest;
@@ -680,64 +755,38 @@ class _NotificationBellState extends State<_NotificationBell> {
           });
         }
       }
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Gagal menandakan semua notifikasi sebagai dibaca.'),
-          backgroundColor: AppTheme.tidakHadir,
-        ),
-      );
-      return;
-    }
-
-    if (!persistedRead) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Notifikasi masih belum ditandakan dibaca di Supabase. Semak policy/update table.',
-          ),
-          backgroundColor: AppTheme.tidakHadir,
-        ),
-      );
-    }
+    } catch (_) {}
 
     if (!mounted) return;
     Navigator.of(context).pop();
-    _showWarningLetterFromNotification(context, notification);
+
+    // Only show warning letter for attendance warnings, not booking notifs
+    if (!isBookingNotif) {
+      _showWarningLetterFromNotification(context, notification);
+    }
   }
 
   Future<void> _markAllRead() async {
     if (widget.user == null) return;
     if (mounted) {
       setState(() {
-        _notifications = _notifications
-            .map((item) => {...item, 'is_read': true})
-            .toList();
+        _notifications =
+            _notifications.map((item) => {...item, 'is_read': true}).toList();
         _computeUnread();
       });
     }
     try {
+      // Mark attendance warnings
       await _reportingService.markAllNotificationsRead(widget.user!.role);
+      // NEW: Mark booking notifications
+      await _notifService.markAllAsRead(widget.user!.id);
+
       final latest = await _fetchNotifications();
-      final unreadCount = latest.where((item) => !_isRead(item['is_read'])).length;
       if (mounted) {
         setState(() {
           _notifications = latest;
           _computeUnread();
         });
-      }
-      if (unreadCount > 0) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Sebahagian notifikasi masih belum ditandakan dibaca di Supabase.',
-            ),
-            backgroundColor: AppTheme.tidakHadir,
-          ),
-        );
       }
     } catch (_) {
       if (!mounted) return;
