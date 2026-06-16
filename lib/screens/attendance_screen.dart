@@ -6,10 +6,14 @@
 // kolum terakhir = % Kehadiran auto-kira.
 // Logik Supabase dalam attendance_service.dart TIDAK diubah.
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../models/attendance_record.dart';
 import '../models/student.dart';
+import '../providers/user_provider.dart';
 import '../services/attendance_service.dart';
+import '../services/notification_service.dart';
+import '../services/reporting_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/attendance_row.dart';
 
@@ -68,6 +72,8 @@ class AttendanceScreen extends StatefulWidget {
 
 class _AttendanceScreenState extends State<AttendanceScreen> {
   final _service = AttendanceService();
+  final _reportingService = ReportingService();
+  final _notificationService = NotificationService();
 
   List<Student> _students = [];
 
@@ -206,6 +212,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               ))
           .toList();
       await _service.submitAttendance(records);
+      await _generateAttendanceWarningNotifications();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -224,6 +231,23 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  Future<void> _generateAttendanceWarningNotifications() async {
+    final user = context.read<UserProvider>().profile;
+    if (user == null) return;
+
+    final hasClassScope =
+        widget.kelas != null && widget.kelas!.trim().isNotEmpty;
+    final summaries = await _reportingService.fetchAttendanceSummary(
+      user,
+      timetableId: hasClassScope ? null : widget.timetableId,
+      section: hasClassScope ? widget.kelas : null,
+    );
+    await _notificationService.generateWarningEscalations(
+      summaries,
+      timetableId: widget.timetableId,
+    );
   }
 
   // -------------------------------------------------------------------------

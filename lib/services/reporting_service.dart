@@ -2,6 +2,7 @@
 //
 // Modul 3: Pelaporan & Pemantauan Kehadiran.
 // Semua data diambil terus daripada Supabase tanpa mock atau fallback.
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/attendance_summary.dart';
@@ -166,8 +167,9 @@ class ReportingService {
         }
 
         final totalCounted = hadir + takHadir;
-        final attendancePercent =
-            totalCounted == 0 ? 100.0 : (hadir / totalCounted) * 100;
+        final attendancePercent = totalCounted == 0
+            ? 100.0
+            : (hadir.toDouble() / totalCounted.toDouble()) * 100.0;
         final warningLevel =
             totalCounted == 0 ? 0 : _warningLevel(attendancePercent);
         final riskStatus =
@@ -191,24 +193,18 @@ class ReportingService {
             riskStatus: riskStatus,
           ),
         );
+
+        if (warningLevel > 0) {
+          debugPrint(
+            'AttendanceSummary ${student['full_name']}: hadir=$hadir, '
+            'takHadir=$takHadir, counted=$totalCounted, '
+            'percent=${attendancePercent.toStringAsFixed(2)}, '
+            'level=$warningLevel',
+          );
+        }
       }
 
       return summaries;
-    } catch (_) {
-      return [];
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> fetchWarningNotifications(UserProfile user) async {
-    try {
-      final data = await _client
-          .from('notifications')
-          .select()
-          .eq('recipient_role', user.role)
-          .order('warning_level', ascending: false)
-          .order('created_at', ascending: false);
-      if (data == null) return [];
-      return List<Map<String, dynamic>>.from(data as List);
     } catch (_) {
       return [];
     }
@@ -286,44 +282,6 @@ class ReportingService {
     }
 
     return saved ?? payload;
-  }
-
-  Future<void> generateWarningEscalations(List<AttendanceSummary> summaries) async {
-    try {
-      final payload = <Map<String, dynamic>>[];
-      for (final summary in summaries) {
-        if (summary.countedRecords == 0) continue;
-        if (summary.warningLevel == 0) continue;
-        final recipients = _recipientsForLevel(summary.warningLevel);
-        for (final role in recipients) {
-          payload.add({
-            'recipient_role': role,
-            'student_id': summary.studentId,
-            'warning_level': summary.warningLevel,
-            'is_read': false,
-            'message':
-                'Kehadiran ${summary.studentName} ialah ${summary.attendancePercent.toStringAsFixed(1)}%. Sila semak dan ambil tindakan susulan.',
-          });
-        }
-      }
-      if (payload.isNotEmpty) {
-        await _client.from('notifications').insert(payload);
-      }
-    } catch (_) {
-      // Do nothing on error.
-    }
-  }
-
-  Future<void> markNotificationRead(dynamic id) async {
-    if (id == null) return;
-    await _client.from('notifications').update({'is_read': true}).eq('id', id);
-  }
-
-  Future<void> markAllNotificationsRead(String role) async {
-    await _client
-        .from('notifications')
-        .update({'is_read': true})
-        .eq('recipient_role', role);
   }
 
   Future<List<Map<String, dynamic>>> fetchRawSessionTrend(
@@ -465,23 +423,6 @@ class ReportingService {
     return 'Kritikal';
   }
 
-  List<String> _recipientsForLevel(int level) {
-    switch (level) {
-      case 1:
-        return ['Lecturer', 'Ketua Program'];
-      case 2:
-        return ['Lecturer', 'Ketua Program', 'Ketua Jabatan'];
-      case 3:
-        return [
-          'Lecturer',
-          'Ketua Program',
-          'Ketua Jabatan',
-          'Timbalan Pengarah Akademik',
-        ];
-      default:
-        return const [];
-    }
-  }
 }
 
 class _TimetableScope {
