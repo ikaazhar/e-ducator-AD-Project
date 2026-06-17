@@ -1,7 +1,6 @@
 // lib/services/notification_service.dart
 //
 // Shared per-user notification data access.
-import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -161,11 +160,6 @@ class NotificationService {
       final payload = <Map<String, dynamic>>[];
       for (final summary in summaries) {
         if (summary.countedRecords == 0 || summary.warningLevel == 0) continue;
-        debugPrint(
-          'Generating notification for ${summary.studentName}: '
-          'percent=${summary.attendancePercent.toStringAsFixed(2)}, '
-          'level=${summary.warningLevel}',
-        );
         final recipients = _recipientsForLevel(summary.warningLevel);
         for (final role in recipients) {
           final users = recipientIdsByRole[role] ?? const <String>{};
@@ -185,8 +179,8 @@ class NotificationService {
       if (payload.isNotEmpty) {
         await _client.from('notifications').insert(payload);
       }
-    } catch (e) {
-      debugPrint('generateWarningEscalations error: $e');
+    } catch (_) {
+      // Attendance warning generation should not block attendance submission.
     }
   }
 

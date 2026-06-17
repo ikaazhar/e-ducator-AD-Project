@@ -2,7 +2,6 @@
 //
 // Modul 3: Pelaporan & Pemantauan Kehadiran.
 // Semua data diambil terus daripada Supabase tanpa mock atau fallback.
-import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/attendance_summary.dart';
@@ -193,15 +192,6 @@ class ReportingService {
             riskStatus: riskStatus,
           ),
         );
-
-        if (warningLevel > 0) {
-          debugPrint(
-            'AttendanceSummary ${student['full_name']}: hadir=$hadir, '
-            'takHadir=$takHadir, counted=$totalCounted, '
-            'percent=${attendancePercent.toStringAsFixed(2)}, '
-            'level=$warningLevel',
-          );
-        }
       }
 
       return summaries;
