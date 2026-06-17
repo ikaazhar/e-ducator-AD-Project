@@ -271,9 +271,9 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final crossAxis = constraints.maxWidth >= 1100
-            ? 5
+            ? 4
             : constraints.maxWidth >= 700
-                ? 3
+                ? 2
                 : 2;
         final cards = [
           SummaryCard(
@@ -292,12 +292,6 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
             value: '$_totalAbsences',
             icon: Icons.event_busy,
             color: AppTheme.tidakHadir,
-          ),
-          SummaryCard(
-            title: 'Pelajar Bawah 80%',
-            value: '$_below80Count',
-            icon: Icons.warning_amber,
-            color: AppTheme.mc,
           ),
           SummaryCard(
             title: 'Kes Amaran Aktif',
@@ -671,7 +665,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
   }
 
   Widget _criticalStudentsTable() {
-    final criticalList = _criticalStudents
+    final criticalList = [..._warningStudents]
       ..sort((a, b) => a.attendancePercent.compareTo(b.attendancePercent));
 
     return Card(
@@ -683,7 +677,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
             Row(
               children: [
                 const Text(
-                  'Senarai Pelajar Kritikal',
+                  'Senarai Pelajar Amaran',
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
                     color: AppTheme.navy,
@@ -697,8 +691,8 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 24),
                 child: Center(
-                  child: Text(
-                    'Tiada pelajar di bawah 80% untuk skop semasa.',
+                    child: Text(
+                    'Tiada pelajar amaran untuk skop semasa.',
                     style: TextStyle(color: AppTheme.textMuted),
                   ),
                 ),
@@ -722,7 +716,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
                           DataColumn(label: Center(child: Text('Kehadiran %'))),
                           DataColumn(label: Center(child: Text('Jumlah Tak Hadir'))),
                           DataColumn(label: Center(child: Text('Tahap Amaran'))),
-                          DataColumn(label: Text('Status Surat Amaran')),
+                          DataColumn(label: Text('Status Tindakan')),
                         ],
                         rows: criticalList.asMap().entries.map((entry) {
                           final summary = entry.value;
@@ -783,13 +777,13 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
     if (canMarkSent) {
       return OutlinedButton.icon(
         icon: const Icon(Icons.check_circle_outline, size: 16),
-        label: const Text('Tanda Telah Dihantar'),
+        label: const Text('Tanda Tindakan Selesai'),
         onPressed: () => _confirmWarningLetterSent(summary),
       );
     }
 
     return _statusChip(
-      label: 'Belum Dihantar',
+      label: 'Belum Dikemaskini',
       color: AppTheme.textMuted,
       icon: Icons.schedule,
     );
@@ -808,7 +802,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           _statusChip(
-            label: 'Telah Dihantar',
+            label: 'Telah Dikemaskini',
             color: AppTheme.hadir,
             icon: Icons.verified,
           ),
@@ -899,7 +893,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
       builder: (context) {
         return AlertDialog(
           title: const Text(
-            'Sahkan Surat Amaran',
+            'Sahkan Status Tindakan',
             style: TextStyle(fontWeight: FontWeight.w700, color: AppTheme.navy),
           ),
           contentPadding: const EdgeInsets.all(24),
@@ -910,7 +904,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Adakah surat amaran rasmi telah dihantar kepada pelajar ini?',
+                  'Adakah tindakan susulan bagi pelajar ini telah diselesaikan?',
                   style: TextStyle(fontSize: 13, height: 1.5),
                 ),
                 const SizedBox(height: 12),
@@ -967,7 +961,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Status surat amaran telah dikemaskini.'),
+          content: Text('Status tindakan telah dikemaskini.'),
           backgroundColor: AppTheme.navy,
         ),
       );
@@ -976,7 +970,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal mengemaskini status surat amaran: $error'),
+          content: Text('Gagal mengemaskini status tindakan: $error'),
           backgroundColor: AppTheme.tidakHadir,
         ),
       );
@@ -1032,7 +1026,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
       dateTo: _dateParam(_dateTo),
     );
     final warningLetterActions = await _service.fetchWarningLetterActions(
-      summaries.where((summary) => summary.attendancePercent < 80).toList(),
+      summaries.where((summary) => summary.warningLevel > 0).toList(),
     );
     final sessionTrend = await _service.fetchRawSessionTrend(
       user,
@@ -1077,7 +1071,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
       dateTo: _dateParam(_dateTo),
     );
     final warningLetterActions = await _service.fetchWarningLetterActions(
-      summaries.where((summary) => summary.attendancePercent < 80).toList(),
+      summaries.where((summary) => summary.warningLevel > 0).toList(),
     );
     final sessionTrend = await _service.fetchRawSessionTrend(
       user,
@@ -1102,8 +1096,8 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
   List<AttendanceSummary> get _withAttendance =>
       _filtered.where(_hasAttendanceRecord).toList();
 
-  List<AttendanceSummary> get _criticalStudents =>
-      _withAttendance.where((s) => s.attendancePercent < 80).toList();
+  List<AttendanceSummary> get _warningStudents =>
+      _withAttendance.where((s) => s.warningLevel > 0).toList();
 
   int get _totalStudents => _filtered.length;
 
@@ -1117,7 +1111,7 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
       _filtered.fold(0, (sum, s) => sum + s.totalAbsences);
 
   int get _below80Count =>
-      _criticalStudents.length;
+      _withAttendance.where((s) => s.attendancePercent < 80).length;
 
   int get _activeWarnings =>
       _withAttendance.where((s) => s.warningLevel > 0).length;
@@ -1172,11 +1166,11 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
 
     final level3Count = _withAttendance.where((s) => s.warningLevel == 3).length;
     if (level3Count > 0) {
-      insights.add('Disyorkan menghantar surat amaran kepada $level3Count pelajar Tahap 3.');
+      insights.add('Tindakan susulan diperlukan untuk $level3Count pelajar Tahap 3.');
     }
 
     if (insights.isEmpty) {
-      insights.add('Tiada isu kritikal dikesan untuk skop semasa.');
+      insights.add('Tiada isu amaran dikesan untuk skop semasa.');
     }
 
     return insights;
@@ -1216,12 +1210,12 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
             _pdfSectionTitle('Taburan Status'),
             _pdfStatusBlocks(totals),
             pw.SizedBox(height: 18),
-            _pdfSectionTitle('Senarai Pelajar Kritikal'),
-            _criticalStudents.isEmpty
+            _pdfSectionTitle('Senarai Pelajar Amaran'),
+            _warningStudents.isEmpty
                 ? _pdfEmptyState(
-                    'Tiada pelajar kritikal untuk skop laporan semasa.',
+                    'Tiada pelajar amaran untuk skop laporan semasa.',
                   )
-                : _pdfStudentTable(_criticalStudents),
+                : _pdfStudentTable(_warningStudents),
             pw.SizedBox(height: 18),
             _pdfSectionTitle('Senarai Semua Pelajar'),
             _filtered.isEmpty
