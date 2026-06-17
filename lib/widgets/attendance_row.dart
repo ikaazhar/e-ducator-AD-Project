@@ -7,16 +7,16 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
 /// Lebar tetap setiap sel minggu.
-const double kWeekCellWidth = 44.0;
+const double kWeekCellWidth = 52.0;
 
 /// Lebar tetap kolum Bil.
-const double kBilCellWidth = 40.0;
+const double kBilCellWidth = 48.0;
 
 /// Lebar tetap kolum Nama Pelajar.
-const double kNamaCellWidth = 200.0;
+const double kNamaCellWidth = 260.0;
 
 /// Lebar tetap kolum % Kehadiran.
-const double kPeratusWidth = 80.0;
+const double kPeratusWidth = 90.0;
 
 /// Jumlah minggu dalam semester.
 const int kTotalMinggu = 18;
@@ -109,7 +109,7 @@ class AttendanceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 48,
+      height: 56,
       child: Row(
         children: [
           // Kolum Bil
@@ -135,7 +135,7 @@ class AttendanceRow extends StatelessWidget {
                 studentName,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  fontSize: 12,
+                  fontSize: 14,
                   fontWeight: FontWeight.w500,
                   color: AppTheme.textDark,
                 ),
@@ -170,7 +170,7 @@ class AttendanceRow extends StatelessWidget {
           : () => _showStatusSheet(context, week),
       child: Container(
         width: kWeekCellWidth,
-        height: 48,
+        height: 56,
         decoration: BoxDecoration(
           color: bgColor,
           border: Border(
@@ -225,7 +225,7 @@ class AttendanceRow extends StatelessWidget {
     final c = _percentColor;
     return Container(
       width: kPeratusWidth,
-      height: 48,
+      height: 56,
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border(
@@ -260,7 +260,7 @@ class AttendanceRow extends StatelessWidget {
   }) {
     return Container(
       width: width,
-      height: 48,
+      height: 56,
       alignment: alignment,
       decoration: BoxDecoration(
         color: Colors.white,

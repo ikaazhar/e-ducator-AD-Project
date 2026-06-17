@@ -51,6 +51,7 @@ class AttendanceScreen extends StatefulWidget {
   /// Digunakan sebagai asas pengiraan tarikh setiap minggu.
   final String attendanceDate;
   final String? kelas;
+  final String? roomName;
   final String userId;
   final bool initialReadOnly;
 
@@ -63,6 +64,7 @@ class AttendanceScreen extends StatefulWidget {
     required this.attendanceDate,
     required this.userId,
     this.kelas,
+    this.roomName,
     this.initialReadOnly = false,
   });
 
@@ -85,6 +87,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   bool _loading = true;
   bool _submitting = false;
+  String _searchQuery = '';
 
   /// Minggu aktif yang sedang dipaparkan / diedit.
   int _activeWeek = 1;
@@ -258,10 +261,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.subjectName),
+        title: const Text('Kembali ke Jadual Waktu'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          tooltip: 'Kembali ke Jadual',
+          tooltip: 'Kembali ke Jadual Waktu',
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -273,6 +276,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 _HeaderCard(
                   subjectName: widget.subjectName,
                   subjectCode: widget.subjectCode,
+                  roomName: widget.roomName,
                   activeWeek: _activeWeek,
                   hadirCount: _hadirKiniCount,
                   totalStudents: _students.length,
@@ -280,6 +284,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   totalWeeks: kTotalMinggu,
                   submittedWeeks: _submittedWeeks,
                   onWeekChanged: (w) => setState(() => _activeWeek = w),
+                  onSearchChanged: (v) => setState(() => _searchQuery = v),
                 ),
                 if (_isActiveWeekSubmitted) _lockedBanner(),
                 if (!_isActiveWeekSubmitted) _bulkBar(),
@@ -303,7 +308,16 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _GridHeader(activeWeek: _activeWeek),
-            ..._students.asMap().entries.map((entry) {
+            ...(_searchQuery.isEmpty
+                    ? _students
+                    : _students
+                        .where((s) => s.fullName
+                            .toLowerCase()
+                            .contains(_searchQuery.toLowerCase()))
+                        .toList())
+                .asMap()
+                .entries
+                .map((entry) {
               final i = entry.key;
               final s = entry.value;
               return AttendanceRow(
@@ -358,11 +372,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           const Icon(Icons.flash_on_rounded, color: AppTheme.teal, size: 18),
           const SizedBox(width: 8),
           const Text(
-            'Tindakan Pukal:',
+            'Pilih...',
             style: TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: 13,
-              color: AppTheme.textDark,
+              color: AppTheme.textMuted,
             ),
           ),
           const SizedBox(width: 12),
@@ -456,6 +470,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 class _HeaderCard extends StatelessWidget {
   final String subjectName;
   final String subjectCode;
+  final String? roomName;
   final int activeWeek;
   final int hadirCount;
   final int totalStudents;
@@ -463,10 +478,12 @@ class _HeaderCard extends StatelessWidget {
   final int totalWeeks;
   final Set<int> submittedWeeks;
   final ValueChanged<int> onWeekChanged;
+  final ValueChanged<String> onSearchChanged;
 
   const _HeaderCard({
     required this.subjectName,
     required this.subjectCode,
+    this.roomName,
     required this.activeWeek,
     required this.hadirCount,
     required this.totalStudents,
@@ -474,6 +491,7 @@ class _HeaderCard extends StatelessWidget {
     required this.totalWeeks,
     required this.submittedWeeks,
     required this.onWeekChanged,
+    required this.onSearchChanged,
   });
 
   @override
@@ -500,13 +518,33 @@ class _HeaderCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      subjectCode,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppTheme.textMuted,
+                    Row(children: [
+                        Text(
+                        subjectCode,
+                        style: const TextStyle(fontSize: 13, color: AppTheme.textMuted),
                       ),
-                    ),
+                      if (roomName != null) ...[
+                        const SizedBox(height: 2),
+                        Row(children: [
+                          const Icon(Icons.meeting_room_outlined, size: 13, color: AppTheme.textMuted),
+                          const SizedBox(width: 4),
+                          Text(
+                            roomName!,
+                            style: const TextStyle(fontSize: 13, color: AppTheme.textMuted),
+                          ),
+                        ]),
+                      ] else ...[
+                        const SizedBox(height: 2),
+                        const Text(
+                          'Masih tiada bilik/makmal disediakan.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textMuted,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
+                    ]),
                   ],
                 ),
               ),
@@ -529,6 +567,24 @@ class _HeaderCard extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 10),
+          TextField(
+            decoration: InputDecoration(
+              hintText: 'Cari nama pelajar...',
+              prefixIcon: const Icon(Icons.search, size: 18),
+              contentPadding:
+                  const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+              filled: true,
+              fillColor: AppTheme.slate,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: AppTheme.slateBorder),
+              ),
+            ),
+            onChanged: onSearchChanged,
+          ),
+          const SizedBox(height: 12),
+          // Pemilih minggu
           const SizedBox(height: 12),
           // Pemilih minggu
           SizedBox(
