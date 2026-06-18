@@ -1,9 +1,6 @@
 [build]
-  command = "git clone https://github.com/flutter/flutter.git --depth 1 -b stable && flutter/bin/flutter config --enable-web && flutter/bin/flutter pub get && flutter/bin/flutter build web --release"
+  command = "rm -rf flutter && git clone https://github.com/flutter/flutter.git --depth 1 -b stable && export PATH=\"$PWD/flutter/bin:$PATH\" && flutter config --enable-web && flutter pub get && flutter build web --release"
   publish = "build/web"
-
-[build.environment]
-  PATH = "/opt/build/repo/flutter/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 [[redirects]]
   from = "/*"
