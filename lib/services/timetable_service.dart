@@ -82,18 +82,28 @@ class TimetableService {
       return ['${departmentUnit}4A', '${departmentUnit}4B'];
     }
     try {
-      final data = await _client
-          .from('students')
-          .select('kelas')
-          .eq('program_id', departmentUnit)
-          .order('kelas');
-      final all = (data as List)
-          .map((r) => r['kelas'] as String?)
-          .whereType<String>()
-          .toSet()
-          .toList();
-      all.sort();
-      return all;
+      // Fetch kelas from both students table AND timetable table so that
+      // newly created classes (with no students yet) still appear in the dropdown.
+      final results = await Future.wait([
+        _client
+            .from('students')
+            .select('kelas')
+            .eq('program_id', departmentUnit),
+        _client
+            .from('timetable')
+            .select('kelas')
+            .eq('department_unit', departmentUnit),
+      ]);
+
+      final all = <String>{};
+      for (final data in results) {
+        for (final r in (data as List)) {
+          final k = (r as Map<String, dynamic>)['kelas'] as String?;
+          if (k != null && k.isNotEmpty) all.add(k);
+        }
+      }
+      final sorted = all.toList()..sort();
+      return sorted;
     } catch (_) {
       return const [];
     }
