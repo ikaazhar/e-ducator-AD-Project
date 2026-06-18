@@ -30,6 +30,83 @@ class AttendanceService {
     }
   }
 
+  /// Tambah pelajar dalam pukal ke jadual `students`.
+  Future<Map<String, dynamic>> bulkInsertStudents(
+      List<Map<String, dynamic>> rows) async {
+    if (SupabaseConfig.isPlaceholder) {
+      return {'inserted': rows.length, 'errors': <String>[]};
+    }
+    final errors = <String>[];
+    int inserted = 0;
+    for (final row in rows) {
+      try {
+        await _client.from('students').upsert(row, onConflict: 'student_id');
+        inserted++;
+      } catch (e) {
+        errors.add('${row['student_id']}: $e');
+      }
+    }
+    return {'inserted': inserted, 'errors': errors};
+  }
+
+  /// Ambil semua pelajar (boleh ditapis mengikut program).
+  Future<List<Student>> fetchAllStudents({String? programId}) async {
+    if (SupabaseConfig.isPlaceholder) {
+      final base = (programId != null && programId.isNotEmpty)
+          ? _mockStudents(programId)
+          : [..._mockStudents('DGS'), ..._mockStudents('DPP')];
+      return base.asMap().entries.map((e) {
+        if (e.key.isEven) {
+          return Student(
+            id: e.value.id,
+            fullName: e.value.fullName,
+            studentId: e.value.studentId,
+            programId: e.value.programId,
+            kelas: null,
+          );
+        }
+        return e.value;
+      }).toList();
+    }
+    try {
+      var query = _client.from('students').select();
+      if (programId != null && programId.isNotEmpty) {
+        query = query.eq('program_id', programId);
+      }
+      final data = await query.order('full_name');
+      return (data as List)
+          .map((row) => Student.fromJson(row as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Kemaskini kelas untuk satu pelajar.
+  Future<void> updateStudentKelas(String id, String? kelas) async {
+    if (SupabaseConfig.isPlaceholder) return;
+    await _client.from('students').update({'kelas': kelas}).eq('id', id);
+  }
+
+/// Kemaskini kelas untuk beberapa pelajar serentak.
+Future<Map<String, dynamic>> bulkUpdateKelas(
+    List<String> ids, String kelas) async {
+  if (SupabaseConfig.isPlaceholder) {
+    return {'updated': ids.length, 'errors': <String>[]};
+  }
+  final errors = <String>[];
+  int updated = 0;
+  for (final id in ids) {
+    try {
+      await _client.from('students').update({'kelas': kelas}).eq('id', id);
+      updated++;
+    } catch (e) {
+      errors.add('$id: $e');
+    }
+  }
+  return {'updated': updated, 'errors': errors};
+}
+
   /// Ambil rekod kehadiran sedia ada untuk satu sesi pada satu tarikh.
   /// Mengembalikan peta `student_id -> attendance_status`.
   Future<Map<String, String>> fetchExistingAttendance({

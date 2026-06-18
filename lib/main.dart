@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config/supabase_config.dart';
 import 'providers/user_provider.dart';
+import 'screens/student_upload_screen.dart';
 import 'screens/admin_booking_monitor_screen.dart';
 import 'screens/admin_room_screen.dart';
 import 'screens/admin_screen.dart';
@@ -24,6 +25,7 @@ import 'screens/room_booking_screen.dart';
 import 'screens/timetable_screen.dart';
 import 'screens/timetable_upload_screen.dart';
 import 'theme/app_theme.dart';
+import 'screens/dashboards/student_class_management_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -65,6 +67,8 @@ class EducatorApp extends StatelessWidget {
           '/discipline-form': (_) => const DisciplineFormScreen(),
           '/reporting': (_) => const ReportingDashboardScreen(),
           '/booking': (_) => const RoomBookingScreen(),
+          '/student-upload': (_) => const StudentUploadScreen(),
+          '/student-classes': (_) => const StudentClassManagementScreen(),
         },
         onGenerateRoute: (settings) {
           if (settings.name == '/attendance') {
@@ -77,7 +81,8 @@ class EducatorApp extends StatelessWidget {
                 departmentUnit: args['departmentUnit'] as String,
                 attendanceDate: args['attendanceDate'] as String,
                 userId: args['userId'] as String,
-                kelas: args['kelas'] as String?,   
+                kelas:           args['kelas']    as String?,
+                roomName:        args['roomName'] as String?,
                 initialReadOnly: (args['isReadOnly'] as bool?) ?? false,
               ),
             );

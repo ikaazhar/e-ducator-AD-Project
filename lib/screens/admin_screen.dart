@@ -158,6 +158,11 @@ class _AdminScreenState extends State<AdminScreen> {
           icon: const Icon(Icons.meeting_room),
           onPressed: () => Navigator.pushNamed(context, '/admin-rooms'),
         ),
+        IconButton(
+          tooltip: 'Muat Naik Data Pelajar',
+          icon: const Icon(Icons.upload_file_outlined),
+          onPressed: () => Navigator.pushNamed(context, '/student-upload'),
+        ),
       ],
       body: FutureBuilder<List<UserProfile>>(
         future: _future,
@@ -279,9 +284,9 @@ class _AdminScreenState extends State<AdminScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues (alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.4)),
+        border: Border.all(color: color.withValues (alpha: 0.4)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

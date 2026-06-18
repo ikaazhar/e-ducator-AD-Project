@@ -237,6 +237,18 @@ class _SidebarContent extends StatelessWidget {
           label: 'Urus Bilik',
           allowedRoles: ['Admin'],
         ),
+        _NavItem(
+          route: '/student-upload',
+          icon: Icons.upload_file_outlined,
+          label: 'Muat Naik Data Pelajar',
+          allowedRoles: ['Admin', 'Ketua Jabatan'],
+        ),
+        _NavItem(
+          route: '/student-classes',
+          icon: Icons.groups_outlined,
+          label: 'Urus Kelas Pelajar',
+          allowedRoles: ['Admin', 'Ketua Jabatan'],
+        ),
       ];
 
   @override
