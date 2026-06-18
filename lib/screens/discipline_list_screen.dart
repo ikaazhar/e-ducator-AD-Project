@@ -11,6 +11,7 @@ import '../services/discipline_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_scaffold.dart';
 import '../widgets/severity_badge.dart';
+import 'discipline_form_screen.dart';
 
 class DisciplineListScreen extends StatefulWidget {
   const DisciplineListScreen({super.key});
@@ -36,7 +37,9 @@ class _DisciplineListScreenState extends State<DisciplineListScreen> {
     return _service.fetchReports(user);
   }
 
-  void _refresh() => setState(() => _future = _load());
+  void _refresh() => setState(() {
+        _future = _load();
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -103,7 +106,8 @@ class _DisciplineListScreenState extends State<DisciplineListScreen> {
     final q = _search.toLowerCase();
     return (r.studentName ?? '').toLowerCase().contains(q) ||
         r.issueType.toLowerCase().contains(q) ||
-        (r.subjectCode ?? '').toLowerCase().contains(q);
+        (r.subjectCode ?? '').toLowerCase().contains(q) ||
+        (r.kelas ?? '').toLowerCase().contains(q);
   }
 
   Widget _filterBar() {
@@ -200,7 +204,7 @@ class _DisciplineListScreenState extends State<DisciplineListScreen> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${r.programId ?? "-"} • ${r.subjectCode ?? "-"} • ${r.issueType}',
+                    '${r.programId ?? "-"} • ${r.kelas ?? "-"} • ${r.subjectCode ?? "-"} • ${r.issueType}',
                     style: const TextStyle(color: AppTheme.textMuted),
                   ),
                   const SizedBox(height: 8),
@@ -225,23 +229,31 @@ class _DisciplineListScreenState extends State<DisciplineListScreen> {
                 SeverityBadge(severity: r.severity),
                 if (canManage) ...[
                   const SizedBox(height: 8),
-                  PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_vert),
-                    onSelected: (v) async {
-                      if (v == 'edit') {
-                        final ok = await Navigator.pushNamed(
-                          context,
-                          '/discipline-form',
-                          arguments: r,
-                        );
-                        if (ok == true) _refresh();
-                      } else if (v == 'delete') {
-                        await _confirmDelete(r);
-                      }
-                    },
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(value: 'edit', child: Text('Edit')),
-                      PopupMenuItem(value: 'delete', child: Text('Padam')),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined, size: 20),
+                        color: AppTheme.teal,
+                        tooltip: 'Edit',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () async {
+                          final ok = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => DisciplineFormScreen(report: r),
+                            ),
+                          );
+                          if (ok == true) _refresh();
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, size: 20),
+                        color: Colors.redAccent,
+                        tooltip: 'Padam',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => _confirmDelete(r),
+                      ),
                     ],
                   ),
                 ],
