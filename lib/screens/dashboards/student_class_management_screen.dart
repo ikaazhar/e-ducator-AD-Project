@@ -68,92 +68,79 @@ class _StudentClassManagementScreenState
   }
 
   Future<void> _showAssignDialog(List<String> ids) async {
-    final existingKelas = _students
-        .map((s) => s.kelas)
-        .where((k) => k != null && k.trim().isNotEmpty)
-        .map((k) => k!)
-        .toSet()
-        .toList()
-      ..sort();
+  final existingKelas = _students
+      .map((s) => s.kelas)
+      .where((k) => k != null && k.trim().isNotEmpty)
+      .map((k) => k!)
+      .toSet()
+      .toList()
+    ..sort();
 
-    String? selected = existingKelas.isNotEmpty ? existingKelas.first : null;
-    bool isNew = existingKelas.isEmpty;
-    final ctrl = TextEditingController();
-
-    final result = await showDialog<String>(
-      context: context,
-      builder: (_) => StatefulBuilder(
-        builder: (ctx, setSt) => AlertDialog(
-          title: Text(ids.length > 1
-              ? 'Tetapkan Kelas (${ids.length} pelajar)'
-              : 'Tetapkan Kelas'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (existingKelas.isNotEmpty)
-                DropdownButtonFormField<String>(
-                  initialValue: isNew ? null : selected,
-                  decoration: const InputDecoration(labelText: 'Kelas sedia ada'),
-                  items: [
-                    ...existingKelas.map(
-                      (k) => DropdownMenuItem(value: k, child: Text(k)),
-                    ),
-                    const DropdownMenuItem(
-                        value: '__new__', child: Text('+ Kelas Baru')),
-                  ],
-                  onChanged: (v) => setSt(() {
-                    if (v == '__new__') {
-                      isNew = true;
-                    } else {
-                      isNew = false;
-                      selected = v;
-                    }
-                  }),
-                ),
-              if (isNew) ...[
-                const SizedBox(height: 12),
-                TextField(
-                  controller: ctrl,
-                  decoration: const InputDecoration(
-                      labelText: 'Kod kelas baharu (cth: DGS4A)'),
-                  textCapitalization: TextCapitalization.characters,
-                ),
-              ],
-            ],
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Batal')),
-            ElevatedButton(
-              onPressed: () {
-                final value = isNew ? ctrl.text.trim() : (selected ?? '');
-                Navigator.pop(context, value);
-              },
-              child: const Text('Simpan'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (result == null || result.isEmpty) return;
-
-    final res = await _service.bulkUpdateKelas(ids, result);
-    if (!mounted) return;
-    final updated = res['updated'] as int;
-    final errors = List<String>.from(res['errors'] as List);
+  if (existingKelas.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(errors.isEmpty
-            ? '$updated pelajar dikemaskini ke kelas $result.'
-            : '$updated berjaya dikemaskini, ${errors.length} gagal.'),
-        backgroundColor: errors.isEmpty ? AppTheme.navy : AppTheme.tidakHadir,
+      const SnackBar(
+        content: Text(
+            'Tiada kelas sedia ada. Sila hubungi pihak pengurusan jadual untuk menambah kelas baharu.'),
+        backgroundColor: AppTheme.tidakHadir,
       ),
     );
-    _load();
+    return;
   }
+
+  String? selected;
+
+  final result = await showDialog<String>(
+    context: context,
+    builder: (_) => StatefulBuilder(
+      builder: (ctx, setSt) => AlertDialog(
+        title: Text(ids.length > 1
+            ? 'Tetapkan Kelas (${ids.length} pelajar)'
+            : 'Tetapkan Kelas'),
+        content: DropdownButtonFormField<String>(
+          initialValue: selected,
+          decoration: const InputDecoration(labelText: 'Kelas sedia ada'),
+          hint: const Text(
+            '---',
+            style: TextStyle(
+              fontStyle: FontStyle.italic,
+              color: AppTheme.textMuted,
+            ),
+          ),
+          items: existingKelas
+              .map((k) => DropdownMenuItem(value: k, child: Text(k)))
+              .toList(),
+          onChanged: (v) => setSt(() => selected = v),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Batal')),
+          ElevatedButton(
+            onPressed:
+                selected == null ? null : () => Navigator.pop(context, selected),
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  if (result == null || result.isEmpty) return;
+
+  final res = await _service.bulkUpdateKelas(ids, result);
+  if (!mounted) return;
+  final updated = res['updated'] as int;
+  final errors = List<String>.from(res['errors'] as List);
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(errors.isEmpty
+          ? '$updated pelajar dikemaskini ke kelas $result.'
+          : '$updated berjaya dikemaskini, ${errors.length} gagal.'),
+      backgroundColor: errors.isEmpty ? AppTheme.navy : AppTheme.tidakHadir,
+    ),
+  );
+  _load();
+}
 
   Widget _kelasChip(String? kelas) {
     final assigned = kelas != null && kelas.trim().isNotEmpty;
