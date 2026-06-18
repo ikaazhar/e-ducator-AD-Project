@@ -1,15 +1,6 @@
 [build]
-  command = "flutter/bin/flutter build web --release"
+  command = "rm -rf flutter && git clone https://github.com/flutter/flutter.git --depth 1 -b stable && export PATH=\"$PWD/flutter/bin:$PATH\" && flutter config --enable-web && flutter pub get && flutter build web --release"
   publish = "build/web"
-
-[build.environment]
-  FLUTTER_VERSION = "3.24.0"
-
-[[headers]]
-  for = "/*"
-  [headers.values]
-    X-Frame-Options = "DENY"
-    X-XSS-Protection = "1; mode=block"
 
 [[redirects]]
   from = "/*"
