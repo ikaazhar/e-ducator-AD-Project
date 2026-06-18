@@ -16,7 +16,14 @@ import '../widgets/app_scaffold.dart';
 // full_name, student_id, program_id, kelas
 
 class StudentUploadScreen extends StatefulWidget {
-  const StudentUploadScreen({super.key});
+  final String? prefillKelas;
+  final String? prefillProgramId;
+
+  const StudentUploadScreen({
+    super.key,
+    this.prefillKelas,
+    this.prefillProgramId,
+  });
 
   @override
   State<StudentUploadScreen> createState() => _StudentUploadScreenState();
@@ -189,6 +196,8 @@ class _StudentUploadScreenState extends State<StudentUploadScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (widget.prefillKelas != null) _buildPrefillBanner(),
+            if (widget.prefillKelas != null) const SizedBox(height: 12),
             _buildInstructions(),
             const SizedBox(height: 16),
             _buildUploadCard(),
@@ -213,6 +222,44 @@ class _StudentUploadScreenState extends State<StudentUploadScreen> {
   }
 
   // ── Instructions ───────────────────────────────────────────────────────────
+
+  Widget _buildPrefillBanner() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.teal.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppTheme.teal.withValues(alpha: 0.4)),
+      ),
+      child: Row(children: [
+        const Icon(Icons.class_outlined, color: AppTheme.teal, size: 18),
+        const SizedBox(width: 10),
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              style: const TextStyle(fontSize: 13, color: AppTheme.textDark),
+              children: [
+                const TextSpan(text: 'Menambah pelajar untuk kelas baru: '),
+                TextSpan(
+                  text: widget.prefillKelas,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.teal,
+                  ),
+                ),
+                const TextSpan(text: '. Pastikan lajur '),
+                const TextSpan(
+                  text: 'kelas',
+                  style: TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.w700),
+                ),
+                const TextSpan(text: ' dalam CSV anda diisi dengan nilai ini.'),
+              ],
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
 
   Widget _buildInstructions() {
     return Container(
@@ -247,7 +294,7 @@ class _StudentUploadScreenState extends State<StudentUploadScreen> {
               borderRadius: BorderRadius.circular(6),
             ),
             child: const Text(
-              'full_name, student_id, program_id',
+              'full_name, student_id, program_id, kelas',
               style: TextStyle(
                   fontSize: 12,
                   fontFamily: 'monospace',
