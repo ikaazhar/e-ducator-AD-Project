@@ -1307,43 +1307,65 @@ class _ReportingDashboardScreenState extends State<ReportingDashboardScreen> {
   }
 
   pw.Widget _pdfFilterTags() {
-    return pw.Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: _pdfFilterPairs()
-          .map((pair) => _pdfFilterTag(pair.key, pair.value))
-          .toList(),
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(
+          'Maklumat Tapisan',
+          style: pw.TextStyle(
+            fontSize: 10,
+            fontWeight: pw.FontWeight.bold,
+            color: PdfColors.blueGrey900,
+          ),
+        ),
+        pw.SizedBox(height: 6),
+        ..._pdfFilterPairs()
+            .map((pair) => _pdfFilterRow(pair.key, pair.value))
+            .toList(),
+      ],
     );
   }
 
-  pw.Widget _pdfFilterTag(String label, String value) {
-    return pw.Container(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: pw.BoxDecoration(
-        color: PdfColors.grey100,
-        border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
-        borderRadius: pw.BorderRadius.circular(12),
-      ),
-      child: pw.RichText(
-        text: pw.TextSpan(
-          children: [
-            pw.TextSpan(
-              text: '$label: ',
+  pw.Widget _pdfFilterRow(String label, String value) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 3),
+      child: pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.SizedBox(
+            width: 78,
+            child: pw.Text(
+              label,
+              textAlign: pw.TextAlign.left,
               style: pw.TextStyle(
-                fontSize: 8.5,
+                fontSize: 9,
                 fontWeight: pw.FontWeight.bold,
                 color: PdfColors.blueGrey800,
               ),
             ),
-            pw.TextSpan(
-              text: value,
+          ),
+          pw.SizedBox(
+            width: 8,
+            child: pw.Text(
+              ':',
+              textAlign: pw.TextAlign.center,
+              style: pw.TextStyle(
+                fontSize: 9,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.blueGrey800,
+              ),
+            ),
+          ),
+          pw.Expanded(
+            child: pw.Text(
+              value,
               style: const pw.TextStyle(
-                fontSize: 8.5,
+                fontSize: 9,
                 color: PdfColors.blueGrey700,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
