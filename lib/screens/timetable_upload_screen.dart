@@ -1020,6 +1020,7 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen>
       ),
     );
 
+    ctrl.dispose();
     if (newKelas == null || newKelas.isEmpty) return;
 
     setState(() {
