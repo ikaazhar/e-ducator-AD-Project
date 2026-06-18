@@ -13,7 +13,10 @@ import '../theme/app_theme.dart';
 import '../widgets/app_scaffold.dart';
 
 class DisciplineFormScreen extends StatefulWidget {
-  const DisciplineFormScreen({super.key});
+  /// Laporan untuk diedit (mod Admin). Jika null → mod cipta (pensyarah).
+  final DisciplineReport? report;
+
+  const DisciplineFormScreen({super.key, this.report});
 
   @override
   State<DisciplineFormScreen> createState() => _DisciplineFormScreenState();
@@ -42,8 +45,10 @@ class _DisciplineFormScreenState extends State<DisciplineFormScreen> {
     super.didChangeDependencies();
     if (_initialised) return;
     _initialised = true;
-    final arg = ModalRoute.of(context)?.settings.arguments;
-    if (arg is DisciplineReport) {
+    // Utamakan parameter konstruktor; sandaran kepada argumen laluan bernama.
+    final routeArg = ModalRoute.of(context)?.settings.arguments;
+    final arg = widget.report ?? (routeArg is DisciplineReport ? routeArg : null);
+    if (arg != null) {
       _editing = arg;
       _issueType = kIssueTypes.contains(arg.issueType) ? arg.issueType : kIssueTypes.first;
       _severity = kSeverityLevels.contains(arg.severity) ? arg.severity : 'Rendah';
@@ -60,9 +65,7 @@ class _DisciplineFormScreenState extends State<DisciplineFormScreen> {
     }
     final user = context.read<UserProvider>().profile!;
     _courses = await _service.fetchLecturerCourses(user.id);
-    final programUnits =
-        _courses.map((c) => c.departmentUnit).toSet().toList();
-    _students = await _service.fetchStudentsForLecturer(programUnits);
+    _students = await _service.fetchStudentsForLecturer(_courses);
     if (mounted) setState(() => _loading = false);
   }
 
@@ -79,8 +82,11 @@ class _DisciplineFormScreenState extends State<DisciplineFormScreen> {
 
   List<Student> get _studentsForSelectedCourse {
     if (_selectedCourse == null) return _students;
+    final course = _selectedCourse!;
     return _students
-        .where((s) => s.programId == _selectedCourse!.departmentUnit)
+        .where((s) =>
+            s.programId == course.departmentUnit &&
+            (course.kelas == null || s.kelas == course.kelas))
         .toList();
   }
 
@@ -277,13 +283,16 @@ class _DisciplineFormScreenState extends State<DisciplineFormScreen> {
         items: _courses
             .map((c) => DropdownMenuItem(
                 value: c,
-                child: Text('${c.subjectCode} — ${c.subjectName}')))
+                child: Text(
+                    '${c.subjectCode} — ${c.subjectName} (${c.kelas ?? c.departmentUnit})')))
             .toList(),
         onChanged: (v) => setState(() {
           _selectedCourse = v;
+          // Tetapkan semula pilihan pelajar jika tidak lagi dalam kelas dipilih.
           if (_selectedStudent != null &&
               v != null &&
-              _selectedStudent!.programId != v.departmentUnit) {
+              (_selectedStudent!.programId != v.departmentUnit ||
+                  (v.kelas != null && _selectedStudent!.kelas != v.kelas))) {
             _selectedStudent = null;
           }
         }),

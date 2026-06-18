@@ -14,6 +14,7 @@ class DisciplineReport {
   final String? departmentId;
   final String? subjectCode;
   final String? subjectName;
+  final String? kelas;
   final DateTime? createdAt;
 
   const DisciplineReport({
@@ -29,6 +30,7 @@ class DisciplineReport {
     this.departmentId,
     this.subjectCode,
     this.subjectName,
+    this.kelas,
     this.createdAt,
   });
 
@@ -41,6 +43,9 @@ class DisciplineReport {
       studentName: student is Map<String, dynamic>
           ? student['full_name'] as String?
           : json['student_name'] as String?,
+      kelas: student is Map<String, dynamic>
+          ? student['kelas'] as String?
+          : json['kelas'] as String?,
       issueType: (json['issue_type'] ?? 'Salah Laku') as String,
       severity: (json['severity'] ?? 'Rendah') as String,
       notes: json['notes'] as String?,
@@ -91,6 +96,7 @@ class DisciplineReport {
       departmentId: departmentId,
       subjectCode: subjectCode ?? this.subjectCode,
       subjectName: subjectName ?? this.subjectName,
+      kelas: kelas,
       createdAt: createdAt,
     );
   }
