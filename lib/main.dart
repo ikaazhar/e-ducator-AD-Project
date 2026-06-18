@@ -67,7 +67,13 @@ class EducatorApp extends StatelessWidget {
           '/discipline-form': (_) => const DisciplineFormScreen(),
           '/reporting': (_) => const ReportingDashboardScreen(),
           '/booking': (_) => const RoomBookingScreen(),
-          '/student-upload': (_) => const StudentUploadScreen(),
+          '/student-upload': (ctx) {
+            final args = ModalRoute.of(ctx)?.settings.arguments as Map<String, String?>?;
+            return StudentUploadScreen(
+              prefillKelas: args?['kelas'],
+              prefillProgramId: args?['program_id'],
+            );
+          },
           '/student-classes': (_) => const StudentClassManagementScreen(),
         },
         onGenerateRoute: (settings) {

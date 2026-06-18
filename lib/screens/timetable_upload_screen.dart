@@ -109,6 +109,7 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen>
   int?     _roomId;
   String?  _lecturerId;
   String?  _kelas;
+  bool     _isNewKelas = false; // true when kelas was just created
 
   // data
   List<Room>         _rooms     = const [];
@@ -250,7 +251,12 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen>
       if (!mounted) return;
       _showSnack('Jadual berjaya disimpan!');
       _codeCtrl.clear(); _nameCtrl.clear();
-      setState(() { _lecturerId = null; _roomId = null; _kelas = null; _showForm = false; });
+      final wasNewKelas = _isNewKelas;
+      final savedKelas = _kelas;
+      setState(() { _lecturerId = null; _roomId = null; _kelas = null; _showForm = false; _isNewKelas = false; });
+      if (wasNewKelas && savedKelas != null && mounted) {
+        _promptAddStudents(savedKelas);
+      }
       await _bootstrap();
     } catch (e) {
       if (mounted) _showSnack('Ralat: $e', isError: true);
@@ -862,8 +868,24 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen>
                   value: _kelas,
                   decoration: const InputDecoration(labelText: 'Kelas'),
                   hint: const Text('Pilih kelas'),
-                  items: _kelasList.map((k) => DropdownMenuItem(value: k, child: Text(k))).toList(),
-                  onChanged: (v) => setState(() => _kelas = v))),
+                  items: [
+                    ..._kelasList.map((k) => DropdownMenuItem(value: k, child: Text(k))),
+                    const DropdownMenuItem(
+                      value: '__new__',
+                      child: Row(children: [
+                        Icon(Icons.add_circle_outline, size: 16, color: AppTheme.teal),
+                        SizedBox(width: 6),
+                        Text('Tambah Kelas Baru', style: TextStyle(color: AppTheme.teal, fontWeight: FontWeight.w600)),
+                      ]),
+                    ),
+                  ],
+                  onChanged: (v) {
+                    if (v == '__new__') {
+                      _showAddKelasDialog();
+                    } else {
+                      setState(() => _kelas = v);
+                    }
+                  })),
               _ff(250, DropdownButtonFormField<String>(
                   value: _lecturerId,
                   decoration: const InputDecoration(labelText: 'Pensyarah'),
@@ -908,6 +930,105 @@ class _TimetableUploadScreenState extends State<TimetableUploadScreen>
         ),
       ),
     );
+  }
+
+  // ─── PROMPT TO ADD STUDENTS AFTER NEW KELAS ────────────────────────────────
+
+  void _promptAddStudents(String kelas) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(children: [
+          Icon(Icons.group_add_outlined, color: AppTheme.teal),
+          SizedBox(width: 8),
+          Text('Kelas Baru Disimpan!'),
+        ]),
+        content: Text(
+          'Kelas "$kelas" berjaya ditambah. Adakah anda ingin menambah pelajar ke kelas ini sekarang?',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Nanti'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.pushNamed(
+                context,
+                '/student-upload',
+                arguments: {'kelas': kelas, 'program_id': _unit},
+              );
+            },
+            icon: const Icon(Icons.upload_file, size: 16),
+            label: const Text('Tambah Pelajar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── ADD NEW KELAS DIALOG ────────────────────────────────────────────────────
+
+  Future<void> _showAddKelasDialog() async {
+    final ctrl = TextEditingController();
+    final newKelas = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(children: [
+          Icon(Icons.add_circle_outline, color: AppTheme.teal),
+          SizedBox(width: 8),
+          Text('Tambah Kelas Baru'),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Masukkan nama kelas baru. Kelas ini belum mempunyai pelajar — anda boleh tambah pelajar selepas kelas ini disimpan.',
+              style: TextStyle(fontSize: 13, color: AppTheme.textMuted),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              textCapitalization: TextCapitalization.characters,
+              decoration: InputDecoration(
+                labelText: 'Nama Kelas',
+                hintText: 'Contoh: DGS4C',
+                prefixIcon: const Icon(Icons.class_outlined),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final val = ctrl.text.trim().toUpperCase();
+              if (val.isEmpty) return;
+              Navigator.pop(ctx, val);
+            },
+            child: const Text('Tambah'),
+          ),
+        ],
+      ),
+    );
+
+    if (newKelas == null || newKelas.isEmpty) return;
+
+    setState(() {
+      if (!_kelasList.contains(newKelas)) {
+        _kelasList = [..._kelasList, newKelas]..sort();
+      }
+      _kelas = newKelas;
+      _isNewKelas = true;
+    });
   }
 
   Widget _ff(double w, Widget child) => SizedBox(width: w, child: child);
